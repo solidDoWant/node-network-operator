@@ -17,6 +17,13 @@ type BridgeReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+func NewBridgeReconciler(mgr ctrl.Manager, nodeName string) *BridgeReconciler {
+	return &BridgeReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}
+}
+
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/finalizers,verbs=update
