@@ -1,11 +1,32 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    app.kubernetes.io/name: bridge-operator
-    app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - bridgeoperator.soliddowant.dev
+  resources:
+  - bridges
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - bridgeoperator.soliddowant.dev
+  resources:
+  - bridges/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - bridgeoperator.soliddowant.dev
+  resources:
+  - bridges/status
+  verbs:
+  - get
+  - patch
+  - update

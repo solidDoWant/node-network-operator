@@ -8,4 +8,13 @@ layout:
 - go.kubebuilder.io/v4
 projectName: bridge-operator
 repo: github.com/solidDoWant/bridge-operator
+resources:
+- api:
+    crdVersion: v1
+  controller: true
+  domain: soliddowant.dev
+  group: bridgeoperator
+  kind: Bridge
+  path: github.com/solidDoWant/bridge-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
