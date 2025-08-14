@@ -4,22 +4,37 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // BridgeSpec defines the desired state of Bridge.
 type BridgeSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// InterfaceName is the name of the network interface to be used for the bridge.
+	// If a bridge interface with this name already exists, it will be adopted.
+	// If it does not exist, a new interface will be created.
+	// It is the responsibility of the user to ensure that the interface name is unique across the node.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[^\s/]+$`
+	// +kubebuilder:validation:MaxLength=15
+	// TODO dont let this change once it has been set
+	InterfaceName string `json:"interfaceName"`
 
-	// Foo is an example field of Bridge. Edit bridge_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// MTU is the maximum transmission unit for the bridge interface.
+	// This should be at least as large as the largest frame payload that will be sent over the bridge.
+	// If not specified, the default MTU for the node will be used.
+	// +kubebuilder:validation:Minimum=68
+	// +kubebuilder:validation:Maximum=65535
+	// TODO don't let this be unset once it has been set
+	MTU *int32 `json:"mtu,omitempty"`
+
+	// NodeSelector is used to select nodes that the bridge should be deployed to.
+	// +kubebuilder:validation:Optional
+	NodeSelector metav1.LabelSelector `json:"nodeSelector,omitempty"`
 }
 
 // BridgeStatus defines the observed state of Bridge.
 type BridgeStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Conditions is a list of conditions that apply to the node network configuration.
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +kubebuilder:object:root=true

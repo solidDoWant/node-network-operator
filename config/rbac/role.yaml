@@ -5,6 +5,19 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+- apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
   - bridges
@@ -21,7 +34,7 @@ rules:
   resources:
   - bridges/finalizers
   verbs:
-  - update
+  - patch
 - apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
