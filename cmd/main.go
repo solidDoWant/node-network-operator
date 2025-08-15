@@ -23,6 +23,7 @@ import (
 
 	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
 	"github.com/solidDoWant/bridge-operator/internal/controller"
+	webhookv1alpha1 "github.com/solidDoWant/bridge-operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -185,6 +186,13 @@ func main() {
 	if err := controller.NewNodeBridgesReconciler(mgr, nodeName).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NodeBridges")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookv1alpha1.SetupBridgeWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Bridge")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

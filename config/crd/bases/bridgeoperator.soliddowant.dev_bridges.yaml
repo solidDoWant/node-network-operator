@@ -48,6 +48,9 @@ spec:
                 maxLength: 15
                 pattern: ^[^\s/]+$
                 type: string
+                x-kubernetes-validations:
+                - message: Value is immutable
+                  rule: self == oldSelf
               mtu:
                 description: |-
                   MTU is the maximum transmission unit for the bridge interface.

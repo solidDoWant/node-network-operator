@@ -13,7 +13,7 @@ type BridgeSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^[^\s/]+$`
 	// +kubebuilder:validation:MaxLength=15
-	// TODO dont let this change once it has been set
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Value is immutable"
 	InterfaceName string `json:"interfaceName"`
 
 	// MTU is the maximum transmission unit for the bridge interface.
@@ -21,12 +21,10 @@ type BridgeSpec struct {
 	// If not specified, the default MTU for the node will be used.
 	// +kubebuilder:validation:Minimum=68
 	// +kubebuilder:validation:Maximum=65535
-	// TODO don't let this be unset once it has been set
 	MTU *int32 `json:"mtu,omitempty"`
 
 	// NodeSelector is used to select nodes that the bridge should be deployed to.
 	// +kubebuilder:validation:Optional
-	// TODO validate with `metav1.LabelSelectorAsSelector(&bridge.Spec.NodeSelector)`
 	NodeSelector metav1.LabelSelector `json:"nodeSelector,omitempty"`
 }
 
