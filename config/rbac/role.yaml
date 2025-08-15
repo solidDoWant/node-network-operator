@@ -17,37 +17,38 @@ rules:
   - nodes
   verbs:
   - list
+  - watch
 - apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
   - bridges
-  - nodebridges
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
-  - update
   - watch
 - apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
   - bridges/finalizers
+  - bridges/status
   verbs:
   - patch
 - apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
-  - bridges/status
+  - nodebridges
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - bridgeoperator.soliddowant.dev
+  resources:
   - nodebridges/status
   verbs:
   - get
   - patch
-  - update
-- apiGroups:
-  - bridgeoperator.soliddowant.dev
-  resources:
-  - nodebridges/finalizers
-  verbs:
   - update

@@ -26,6 +26,7 @@ type BridgeSpec struct {
 
 	// NodeSelector is used to select nodes that the bridge should be deployed to.
 	// +kubebuilder:validation:Optional
+	// TODO validate with `metav1.LabelSelectorAsSelector(&bridge.Spec.NodeSelector)`
 	NodeSelector metav1.LabelSelector `json:"nodeSelector,omitempty"`
 }
 
@@ -34,7 +35,14 @@ type BridgeStatus struct {
 	// Conditions is a list of conditions that apply to the bridge configuration.
 	// +listType=map
 	// +listMapKey=type
+	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
+	// MatchedNodes is a list of node names that match the bridge's node selector.
+	// This is used to track which nodes the bridge is deployed to.
+	// +listType=atomic
+	// +optional
+	MatchedNodes []string `json:"matchedNodes,omitempty"`
 }
 
 // +kubebuilder:object:root=true

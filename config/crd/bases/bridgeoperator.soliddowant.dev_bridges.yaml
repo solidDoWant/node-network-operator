@@ -171,6 +171,14 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              matchedNodes:
+                description: |-
+                  MatchedNodes is a list of node names that match the bridge's node selector.
+                  This is used to track which nodes the bridge is deployed to.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
             type: object
         type: object
     served: true

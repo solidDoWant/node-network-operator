@@ -46,9 +46,8 @@ func NewNodeBridgesReconciler(mgr ctrl.Manager, nodeName string) *NodeBridgesRec
 	}
 }
 
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=list
 
@@ -66,6 +65,8 @@ func (r *NodeBridgesReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Error(err, "unable to fetch NodeBridges")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	log = log.WithValues("nodeBridges", nodeBridges.Name)
 
 	if !nodeBridges.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, &nodeBridges)
@@ -255,7 +256,7 @@ func (r *NodeBridgesReconciler) updateStatus(ctx context.Context, nodeBridges *b
 		return fmt.Errorf("failed to patch NodeBridges status: %w", err)
 	}
 
-	log.V(1).Info("NodeBridges status updated", "conditions", nodeBridges.Status.Conditions)
+	log.V(1).Info("NodeBridges status updated")
 	return nil
 }
 

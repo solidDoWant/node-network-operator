@@ -7,9 +7,9 @@ import (
 // NodeBridgesSpec defines the desired state of NodeBridges.
 type NodeBridgesSpec struct {
 	// MatchingBridges is a list of bridge names that match the node's configuration.
-	// +listType=atomic
+	// +listType=set
 	// +optional
-	MatchingBridges []string `json:"matchingBridges,omitempty"`
+	MatchingBridges []string `json:"matchingBridges,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // NodeBridgesStatusConditions is a list of conditions that apply to a specific node bridge configuration.

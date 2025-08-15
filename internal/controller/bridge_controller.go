@@ -4,51 +4,57 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"slices"
-	"syscall"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/elliotchance/pie/v2"
 	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
-	"github.com/vishvananda/netlink"
 )
+
+var bridgeFinalizerName = bridgeoperatorv1alpha1.GroupVersion.Group
 
 // BridgeReconciler reconciles a Bridge object
 type BridgeReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	nodeName string
 	recorder record.EventRecorder
 }
 
-func NewBridgeReconciler(mgr ctrl.Manager, nodeName string) *BridgeReconciler {
+func NewBridgeReconciler(mgr ctrl.Manager) *BridgeReconciler {
 	return &BridgeReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		nodeName: nodeName,
 		recorder: mgr.GetEventRecorderFor("bridge-controller"),
 	}
 }
 
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/status,verbs=get;update;patch
+// TODO:
+// * validation webhook
+//    * validate node selector
+//    * validate interface name
+//    * validate MTU
+
+// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/status,verbs=patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/finalizers,verbs=patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=list
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=list;watch
+// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges,verbs=get;list;create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -67,177 +73,117 @@ func (r *BridgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log = log.WithValues("bridge", bridge.Spec.InterfaceName)
 
-	// Ignore if the bridge resource does not match the current node
-	matchesNode, err := r.doesResourceMatchNode(ctx, &bridge)
-	if err != nil {
-		log.Error(err, "failed to check if bridge resource matches node")
-
-		condition := metav1.Condition{
-			Type:    r.nodeName + "/Ready",
-			Status:  metav1.ConditionFalse,
-			Reason:  "NodeCheckFailed",
-			Message: fmt.Sprintf("Failed to check if bridge resource matches node: %v", err),
-		}
-
-		if err := r.updateBridgeStatus(ctx, &bridge, condition); err != nil {
-			log.Error(err, "failed to update bridge status")
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
-	}
-
-	if !matchesNode {
-		log.V(1).Info("bridge resource does not match current node, skipping reconciliation")
-		return ctrl.Result{}, nil
-	}
-
-	log.Info("reconciling bridge resource")
-
 	// Handle deletion of the bridge resource
 	if !bridge.DeletionTimestamp.IsZero() {
-		if err := r.handleDeletion(ctx, &bridge); err != nil {
-			log.Error(err, "failed to delete of bridge resources")
-
-			condition := metav1.Condition{
-				Type:    r.nodeName + "/Cleanup",
-				Status:  metav1.ConditionFalse,
-				Reason:  "CleanupFailed",
-				Message: fmt.Sprintf("Failed to clean up bridge %s: %v", bridge.Spec.InterfaceName, err),
-			}
-
-			if err := r.updateBridgeStatus(ctx, &bridge, condition); err != nil {
-				log.Error(err, "failed to update bridge status")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, nil
+		return r.handleDeletion(ctx, &bridge)
 	}
 
-	// Ensure the finalizer exists on the Bridge resource
-	// This must occur prior to changing the underlying state, so that cleanup can be ensured prior
-	// to "taking ownership" of the bridge.
 	if err := r.ensureFinalizerExists(ctx, &bridge); err != nil {
-		log.Error(err, "failed to ensure finalizer exists")
-
 		condition := metav1.Condition{
-			Type:    r.nodeName + "/Ready",
+			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
 			Reason:  "FinalizerSetupFailed",
-			Message: fmt.Sprintf("Failed to ensure finalizer exists for bridge: %v", err),
+			Message: fmt.Sprintf("Failed to ensure finalizer exists: %v", err),
 		}
 
-		if err := r.updateBridgeStatus(ctx, &bridge, condition); err != nil {
-			log.Error(err, "failed to update bridge status")
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
+		return r.handleError(ctx, &bridge, condition, err, "failed to ensure finalizer exists for bridge")
 	}
 
-	// Ensure the bridge matches the desired state specified in the Bridge resource
-	if err := r.ensureBridgeMatchesDesiredState(ctx, &bridge); err != nil {
-		log.Error(err, "failed to ensure bridge matches desired state")
-
+	if err := r.updateNodeBridges(ctx, &bridge); err != nil {
 		condition := metav1.Condition{
-			Type:    r.nodeName + "/Ready",
+			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
-			Reason:  "BridgeSetupFailed",
-			Message: fmt.Sprintf("Failed to ensure bridge matches desired state: %v", err),
+			Reason:  "NodeBridgesUpdateFailed",
+			Message: fmt.Sprintf("Failed to update all NodeBridges resources: %v", err),
 		}
-
-		if err := r.updateBridgeStatus(ctx, &bridge, condition); err != nil {
-			log.Error(err, "failed to update bridge status")
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{}, err
+		return r.handleError(ctx, &bridge, condition, err, "failed to update NodeBridges resources for all nodes")
 	}
 
 	// Update the status of the bridge resource
 	condition := metav1.Condition{
-		Type:   r.nodeName + "/Ready",
+		Type:   "Ready",
 		Status: metav1.ConditionTrue,
 	}
-
-	if err := r.updateBridgeStatus(ctx, &bridge, condition); err != nil {
-		log.Error(err, "failed to update bridge status")
-		return ctrl.Result{}, err
-	}
-
-	log.Info("bridge reconciled successfully")
-	return ctrl.Result{}, nil
+	meta.SetStatusCondition(&bridge.Status.Conditions, condition)
+	return ctrl.Result{}, r.updateStatus(ctx, &bridge)
 }
 
-func (r *BridgeReconciler) doesResourceMatchNode(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) (bool, error) {
-	selector, err := metav1.LabelSelectorAsSelector(&bridge.Spec.NodeSelector)
-	if err != nil {
-		return false, fmt.Errorf("failed to convert label selector: %w", err)
-	}
-
-	var nodes corev1.NodeList
-	if err := r.List(context.Background(), &nodes, client.MatchingLabelsSelector{Selector: selector}, client.MatchingLabels{}); err != nil {
-		return false, fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	return slices.ContainsFunc(nodes.Items, func(node corev1.Node) bool {
-		return node.Name == r.nodeName
-	}), nil
+// handleError handles errors during reconciliation, updating the Bridge status with the error condition.
+// If an error occurs while updating the conditions, it logs the error and fires an event with the error message.
+func (r *BridgeReconciler) handleError(ctx context.Context, nodeBridges *bridgeoperatorv1alpha1.Bridge, condition metav1.Condition, err error, msg string, args ...interface{}) (ctrl.Result, error) {
+	logf.FromContext(ctx).Error(err, msg, args...)
+	meta.SetStatusCondition(&nodeBridges.Status.Conditions, condition)
+	return ctrl.Result{}, r.updateStatus(ctx, nodeBridges)
 }
 
-func (r *BridgeReconciler) handleDeletion(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
+func (r *BridgeReconciler) handleDeletion(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	if !controllerutil.ContainsFinalizer(bridge, r.getFinalizerName()) {
-		log.V(1).Info("bridge resource is being deleted, but finalizer is not present, skipping")
-		return nil
+	if !controllerutil.ContainsFinalizer(bridge, bridgeFinalizerName) {
+		log.V(1).Info("no finalizer present, not performing cleanup")
+		return ctrl.Result{}, nil
 	}
 
-	log.Info("cleaning up for bridge resource deletion")
+	log.Info("deleting Bridge resources")
+	if err := r.performDeletion(ctx, bridge); err != nil {
+		condition := metav1.Condition{
+			Type:    "Cleanup",
+			Status:  metav1.ConditionFalse,
+			Reason:  "CleanupFailed",
+			Message: fmt.Sprintf("Failed to clean up bridge %s: %v", bridge.Spec.InterfaceName, err),
+		}
 
-	// Get the bridge link by name
-	link, err := r.getBridge(ctx, bridge.Spec.InterfaceName)
-	if err != nil {
-		if errors.Is(err, syscall.ENODEV) {
-			log.V(1).Info("bridge link does not exist, skipping deletion")
+		return r.handleError(ctx, bridge, condition, err, "failed to clean up all bridge resources")
+	}
+
+	readyCondition := metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "Deleted",
+		Message: fmt.Sprintf("Bridge %s has been deleted", bridge.Spec.InterfaceName),
+	}
+	cleanupCondition := metav1.Condition{
+		Type:    "Cleanup",
+		Status:  metav1.ConditionTrue,
+		Reason:  "CleanupSuccessful",
+		Message: fmt.Sprintf("Bridge %s has been cleaned up successfully", bridge.Spec.InterfaceName),
+	}
+
+	meta.SetStatusCondition(&bridge.Status.Conditions, readyCondition)
+	meta.SetStatusCondition(&bridge.Status.Conditions, cleanupCondition)
+	return ctrl.Result{}, client.IgnoreNotFound(r.updateStatus(ctx, bridge))
+}
+
+func (r *BridgeReconciler) performDeletion(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
+	if err := r.removeFromNodeBridges(ctx, bridge, nil); err != nil {
+		return fmt.Errorf("failed to remove bridge from all NodeBridges resources: %w", err)
+	}
+
+	// Remove the finalizer, allowing the resource to be deleted
+	controllerutil.RemoveFinalizer(bridge, bridgeFinalizerName)
+	if err := r.Patch(ctx, bridge, client.Apply); err != nil {
+		if apierrors.IsNotFound(err) {
+			// The resource has already been deleted, nothing to do
 			return nil
 		}
-		log.Error(err, "failed to get bridge link for deletion")
-		return err
+
+		return fmt.Errorf("failed to remove finalizer from bridge resource %s: %w", bridge.Name, err)
 	}
 
-	// Delete the bridge link
-	if err := netlink.LinkDel(link); err != nil && !errors.Is(err, syscall.ENODEV) {
-		log.Error(err, "failed to delete bridge link")
-		return err
-	}
-
-	log.Info("bridge link deleted")
-
-	// Remove the finalizer from the Bridge resource
-	controllerutil.RemoveFinalizer(bridge, r.getFinalizerName())
-	if err := r.Update(ctx, bridge); err != nil {
-		log.Error(err, "failed to remove finalizer from Bridge resource")
-		return err
-	}
-
-	log.Info("finalizer removed from Bridge resource")
 	return nil
 }
 
-func (r *BridgeReconciler) getFinalizerName() string {
-	return fmt.Sprintf("%s/%s", bridgeoperatorv1alpha1.GroupVersion.Group, r.nodeName)
-}
-
 func (r *BridgeReconciler) removeFinalizer(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	if !controllerutil.RemoveFinalizer(bridge, r.getFinalizerName()) {
+	if !controllerutil.RemoveFinalizer(bridge, bridgeFinalizerName) {
 		return nil
 	}
 
-	if err := r.Update(ctx, bridge); err != nil {
+	if err := r.Patch(ctx, bridge, client.Apply); err != nil {
+		if apierrors.IsNotFound(err) {
+			// The resource has already been deleted, nothing to do
+			return nil
+		}
+
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
@@ -246,7 +192,7 @@ func (r *BridgeReconciler) removeFinalizer(ctx context.Context, bridge *bridgeop
 
 // Ensure the finalizer exists on the Bridge resource, so that it can be cleaned up properly
 func (r *BridgeReconciler) ensureFinalizerExists(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	if !controllerutil.AddFinalizer(bridge, r.getFinalizerName()) {
+	if !controllerutil.AddFinalizer(bridge, bridgeFinalizerName) {
 		return nil
 	}
 
@@ -257,126 +203,149 @@ func (r *BridgeReconciler) ensureFinalizerExists(ctx context.Context, bridge *br
 	return nil
 }
 
-// Ensures that the bridge matches the desired state specified in the Bridge resource.
-func (r *BridgeReconciler) ensureBridgeMatchesDesiredState(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	if err := r.ensureBridgeExists(ctx, bridge.Spec.InterfaceName); err != nil {
-		return fmt.Errorf("failed to ensure bridge exists: %w", err)
-	}
-
-	link, err := r.getBridge(ctx, bridge.Spec.InterfaceName)
+func (r *BridgeReconciler) getMatchingNodes(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) ([]corev1.Node, error) {
+	nodeSelector, err := metav1.LabelSelectorAsSelector(&bridge.Spec.NodeSelector)
 	if err != nil {
-		return fmt.Errorf("unable to get bridge %s: %w", bridge.Spec.InterfaceName, err)
+		// This should be caught by the validation webhook
+		return nil, fmt.Errorf("failed to convert node selector: %w", err)
 	}
 
-	if bridge.Spec.MTU != nil {
-		mtu := int(*bridge.Spec.MTU)
-		if err := r.ensureBridgeMTU(ctx, link, mtu); err != nil {
-			return fmt.Errorf("failed to ensure bridge has MTU of %d: %w", mtu, err)
+	var matchingNodes corev1.NodeList
+	if err := r.List(ctx, &matchingNodes, client.MatchingLabelsSelector{Selector: nodeSelector}); err != nil {
+		return nil, err
+	}
+
+	return matchingNodes.Items, nil
+}
+
+func (r *BridgeReconciler) updateNodeBridges(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
+	nodes, err := r.getMatchingNodes(ctx, bridge)
+	if err != nil {
+		return fmt.Errorf("failed to get matching node names: %w", err)
+	}
+
+	condition := metav1.Condition{
+		Type:   "Ready",
+		Status: metav1.ConditionUnknown,
+		Reason: "ReconcileStarted",
+	}
+	meta.SetStatusCondition(&bridge.Status.Conditions, condition)
+
+	if err := r.removeFromNodeBridges(ctx, bridge, nodes); err != nil {
+		return fmt.Errorf("failed to remove bridge from all undesired NodeBridges resources: %w", err)
+	}
+
+	if err := r.registerWithNodeBridges(ctx, bridge, nodes); err != nil {
+		return fmt.Errorf("failed to register bridge with NodeBridges resources: %w", err)
+	}
+
+	return nil
+}
+
+func (r *BridgeReconciler) removeFromNodeBridges(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge, newNodes []corev1.Node) error {
+	desiredNodeBridgesNames := pie.Map(newNodes, func(node corev1.Node) string {
+		return node.Name
+	})
+
+	_, undesiredNodeBridgesNames := pie.Diff(bridge.Status.MatchedNodes, desiredNodeBridgesNames)
+
+	errs := pie.Map(undesiredNodeBridgesNames, func(nodeBridgesName string) error {
+		var nodeBridges bridgeoperatorv1alpha1.NodeBridges
+		if err := r.Get(ctx, client.ObjectKey{Name: nodeBridgesName}, &nodeBridges); err != nil {
+			if apierrors.IsNotFound(err) {
+				// NodeBridges resource does not exist, nothing to do
+				return nil
+			}
+
+			return fmt.Errorf("failed to get NodeBridges resource for node %s: %w", nodeBridgesName, err)
 		}
-	}
 
-	if err := r.ensureBridgeUp(ctx, link); err != nil {
-		return fmt.Errorf("failed to ensure bridge is up: %w", err)
+		if !slices.Contains(nodeBridges.Spec.MatchingBridges, bridge.Name) {
+			// Skip the resource if it does not contain the bridge
+			return nil
+		}
+
+		nodeBridges.Spec.MatchingBridges = pie.Filter(nodeBridges.Spec.MatchingBridges, func(bridgeName string) bool {
+			return bridgeName != bridge.Name
+		})
+
+		if err := r.Patch(ctx, &nodeBridges, client.Apply); err != nil {
+			if apierrors.IsNotFound(err) {
+				// NodeBridges resource does not exist, nothing to do
+				return nil
+			}
+
+			return fmt.Errorf("failed to patch NodeBridges resource for node %s: %w", nodeBridgesName, err)
+		}
+
+		// Remove the bridge from the status of the Bridge resource
+		bridge.Status.MatchedNodes = pie.Filter(bridge.Status.MatchedNodes, func(nodeName string) bool {
+			return nodeName != nodeBridgesName
+		})
+		return nil
+	})
+
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("failed to remove bridge from all undesired NodeBridges resources: %w", err)
 	}
 
 	return nil
 }
 
-// Add the bridge, ignoring if it already exists
-func (r *BridgeReconciler) ensureBridgeExists(ctx context.Context, bridgeName string) error {
-	log := logf.FromContext(ctx)
+func (r *BridgeReconciler) registerWithNodeBridges(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge, nodes []corev1.Node) error {
+	// Doing this first ensures that the bridge status always contains at least the nodes that match the bridge's node selector
+	// even if one or more NodeBridges resources fail to be created or updated.
+	// This is important because the bridge status is used to track which NodeBridges resources may need to be cleaned up upon deletion.
+	bridge.Status.MatchedNodes = pie.Map(nodes, func(node corev1.Node) string {
+		return node.Name
+	})
+	if err := r.updateStatus(ctx, bridge); err != nil {
+		return fmt.Errorf("failed to update bridge status with matched nodes: %w", err)
+	}
 
-	newBridgeAttrs := netlink.NewLinkAttrs()
-	newBridgeAttrs.Name = bridgeName
-	newBridgeLink := &netlink.Bridge{LinkAttrs: newBridgeAttrs}
+	errs := pie.Map(nodes, func(node corev1.Node) error {
+		nodeBridges := bridgeoperatorv1alpha1.NodeBridges{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: node.Name,
+			},
+		}
 
-	err := netlink.LinkAdd(newBridgeLink)
-	if err == nil {
-		log.Info("bridge link created", "bridge", bridgeName)
+		if _, err := controllerutil.CreateOrPatch(ctx, r.Client, &nodeBridges, func() error {
+			if !nodeBridges.DeletionTimestamp.IsZero() {
+				// Don't do anything if the NodeBridges resource is being deleted
+				return nil
+			}
+
+			if err := controllerutil.SetOwnerReference(&node, &nodeBridges, r.Scheme, controllerutil.WithBlockOwnerDeletion(true)); err != nil {
+				return fmt.Errorf("failed to set owner reference: %w", err)
+			}
+
+			if slices.Contains(nodeBridges.Spec.MatchingBridges, bridge.Name) {
+				nodeBridges.Spec.MatchingBridges = append(nodeBridges.Spec.MatchingBridges, bridge.Name)
+			}
+
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to create or patch NodeBridges resource for node %s: %w", node.Name, err)
+		}
+
 		return nil
-	}
+	})
 
-	if errors.Is(err, syscall.EEXIST) {
-		log.V(1).Info("link already exists", "link", bridgeName)
-		return nil
-	}
-
-	return fmt.Errorf("unable to add bridge link %s: %w", bridgeName, err)
-}
-
-func (r *BridgeReconciler) getBridge(ctx context.Context, bridgeName string) (*netlink.Bridge, error) {
-	// Read the bridge link info back from netlink, populating fields set by the kernel
-	link, err := netlink.LinkByName(bridgeName)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get link %s: %w", bridgeName, err)
-	}
-
-	// Verify that the link is a bridge
-	if bridgeLink, ok := link.(*netlink.Bridge); ok {
-		return bridgeLink, nil
-	}
-
-	return nil, fmt.Errorf("link %s is not a bridge", bridgeName)
-}
-
-// Ensure the bridge link has the correct MTU
-func (r *BridgeReconciler) ensureBridgeMTU(ctx context.Context, bridgeLink *netlink.Bridge, desiredMTU int) error {
-	log := logf.FromContext(ctx)
-
-	bridgeAttrs := bridgeLink.Attrs()
-	if bridgeAttrs == nil {
-		return fmt.Errorf("bridge link has no attributes")
-	}
-
-	if bridgeAttrs.MTU == desiredMTU {
-		return nil
-	}
-
-	if err := netlink.LinkSetMTU(bridgeLink, desiredMTU); err != nil {
-		return fmt.Errorf("unable to set MTU for bridge link %s: %w", bridgeAttrs.Name, err)
-	}
-	log.Info("MTU set for bridge link", "bridge", bridgeAttrs.Name, "mtu", desiredMTU)
-
-	return nil
-}
-
-// Ensure the bridge link is up
-func (r *BridgeReconciler) ensureBridgeUp(ctx context.Context, bridgeLink *netlink.Bridge) error {
-	log := logf.FromContext(ctx)
-
-	bridgeAttrs := bridgeLink.Attrs()
-	if bridgeAttrs == nil {
-		return fmt.Errorf("bridge link has no attributes")
-	}
-
-	if bridgeAttrs.Flags&net.FlagUp != 0 {
-		log.V(1).Info("bridge link is already up", "bridge", bridgeAttrs.Name)
-		return nil
-	}
-
-	if err := netlink.LinkSetUp(bridgeLink); err != nil {
-		return fmt.Errorf("unable to set bridge link %s up: %w", bridgeLink.Attrs().Name, err)
-	}
-	log.Info("bridge link set up", "bridge", bridgeLink.Attrs().Name)
-
-	return nil
+	return errors.Join(errs...)
 }
 
 // updateBridgeStatus updates the status of the Bridge resource with the given condition.
-func (r *BridgeReconciler) updateBridgeStatus(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge, condition metav1.Condition) error {
+func (r *BridgeReconciler) updateStatus(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
 	log := logf.FromContext(ctx)
-
-	if !meta.SetStatusCondition(&bridge.Status.Conditions, condition) {
-		return nil
-	}
 
 	if err := r.Status().Patch(ctx, bridge, client.Apply); err != nil {
 		log.Error(err, "unable to patch Bridge status")
 		r.recorder.Eventf(bridge, "Warning", "StatusUpdateFailed", "Failed to update status for bridge: %v", err)
-		return err
+		return fmt.Errorf("failed to update bridge status: %w", err)
 	}
 
-	log.Info("bridge status updated", "condition", condition.Type, "status", condition.Status)
+	log.V(1).Info("bridge status updated")
 	return nil
 }
 
@@ -392,13 +361,40 @@ func (r *BridgeReconciler) updateBridgeStatus(ctx context.Context, bridge *bridg
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BridgeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	labelChangedPredicate := predicate.LabelChangedPredicate{}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		// Watch Bridge resources for spec changes
 		For(&bridgeoperatorv1alpha1.Bridge{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{
+						NamespacedName: client.ObjectKey{
+							Name: o.GetName(),
+						},
+					},
+				}
+			}),
+			builder.WithPredicates(
+				// Trigger on any change that would affect what the node selector matches.
+				predicate.Funcs{
+					CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
+						return true
+					},
+					DeleteFunc: func(tce event.TypedDeleteEvent[client.Object]) bool {
+						return true
+					},
+					UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+						return labelChangedPredicate.Update(tue)
+					},
+					GenericFunc: func(tge event.TypedGenericEvent[client.Object]) bool {
+						return false
+					},
+				},
+			),
+		).
 		Named("bridge").
-		WithOptions(controller.TypedOptions[reconcile.Request]{
-			// Ignore leader election. This controller should run once per node.
-			NeedLeaderElection: ptr.To(false),
-		}).
 		Complete(r)
 }
