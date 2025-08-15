@@ -112,7 +112,7 @@ spec:
             properties:
               conditions:
                 description: Conditions is a list of conditions that apply to the
-                  node network configuration.
+                  bridge configuration.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

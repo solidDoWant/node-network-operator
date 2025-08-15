@@ -21,6 +21,7 @@ rules:
   - bridgeoperator.soliddowant.dev
   resources:
   - bridges
+  - nodebridges
   verbs:
   - create
   - delete
@@ -39,7 +40,14 @@ rules:
   - bridgeoperator.soliddowant.dev
   resources:
   - bridges/status
+  - nodebridges/status
   verbs:
   - get
   - patch
+  - update
+- apiGroups:
+  - bridgeoperator.soliddowant.dev
+  resources:
+  - nodebridges/finalizers
+  verbs:
   - update

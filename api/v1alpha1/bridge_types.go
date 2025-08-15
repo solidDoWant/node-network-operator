@@ -31,7 +31,7 @@ type BridgeSpec struct {
 
 // BridgeStatus defines the observed state of Bridge.
 type BridgeStatus struct {
-	// Conditions is a list of conditions that apply to the node network configuration.
+	// Conditions is a list of conditions that apply to the bridge configuration.
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

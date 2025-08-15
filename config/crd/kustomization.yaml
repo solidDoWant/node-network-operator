@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/bridgeoperator.soliddowant.dev_bridges.yaml
+- bases/bridgeoperator.soliddowant.dev_nodebridges.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

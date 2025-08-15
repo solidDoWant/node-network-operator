@@ -17,4 +17,12 @@ resources:
   kind: Bridge
   path: github.com/solidDoWant/bridge-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: soliddowant.dev
+  group: bridgeoperator
+  kind: NodeBridges
+  path: github.com/solidDoWant/bridge-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
