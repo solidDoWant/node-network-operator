@@ -7,6 +7,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
 	github.com/vishvananda/netlink v1.3.1
+	// TODO after the v0.34.0 release, update the ENVTEST_K8S_VERSION in the makefile
 	k8s.io/api v0.34.0-rc.1
 	// This RC is needed due to https://github.com/kubernetes/kubernetes/pull/132871
 	k8s.io/apimachinery v0.34.0-rc.1
