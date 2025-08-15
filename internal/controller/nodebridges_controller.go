@@ -113,7 +113,7 @@ func (r *NodeBridgesReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return r.handleError(ctx, &nodeBridges, condition, err, "failed to update previously attempted bridges")
 	}
 
-	if err := r.ensureNoDuplicateInterfaceNames(ctx, &nodeBridges, bridgeResources); err != nil {
+	if err := r.ensureNoDuplicateInterfaceNames(&nodeBridges, bridgeResources); err != nil {
 		condition := metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
@@ -155,8 +155,8 @@ func (r *NodeBridgesReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // handleError handles errors during reconciliation, updating the NodeBridges status with the error condition.
 // If an error occurs while updating the conditions, it logs the error and fires an event with the error message.
-func (r *NodeBridgesReconciler) handleError(ctx context.Context, nodeBridges *bridgeoperatorv1alpha1.NodeBridges, condition metav1.Condition, err error, msg string, args ...interface{}) (ctrl.Result, error) {
-	logf.FromContext(ctx).Error(err, msg, args...)
+func (r *NodeBridgesReconciler) handleError(ctx context.Context, nodeBridges *bridgeoperatorv1alpha1.NodeBridges, condition metav1.Condition, err error, msg string) (ctrl.Result, error) {
+	logf.FromContext(ctx).Error(err, msg)
 	meta.SetStatusCondition(&nodeBridges.Status.Conditions, condition)
 	return ctrl.Result{}, r.updateStatus(ctx, nodeBridges)
 }
@@ -208,7 +208,7 @@ func (r *NodeBridgesReconciler) performDeletion(ctx context.Context, nodeBridges
 
 // ensureNoDuplicateInterfaceNames checks if any bridges share the same interface name.
 // If duplicates are found, it updates the NodeBridges' link conditions with an error condition and returns an error.
-func (r *NodeBridgesReconciler) ensureNoDuplicateInterfaceNames(ctx context.Context, nodeBridges *bridgeoperatorv1alpha1.NodeBridges, bridgeResources map[string]bridgeoperatorv1alpha1.Bridge) error {
+func (r *NodeBridgesReconciler) ensureNoDuplicateInterfaceNames(nodeBridges *bridgeoperatorv1alpha1.NodeBridges, bridgeResources map[string]bridgeoperatorv1alpha1.Bridge) error {
 	// Key is the interface name, value is a list of bridge names that share that interface name
 	interfaceNames := make(map[string][]string, len(bridgeResources))
 
@@ -330,7 +330,7 @@ func (r *NodeBridgesReconciler) performBridgeLinkCleanup(ctx context.Context, br
 	log := logf.FromContext(ctx)
 
 	// Get the bridge link by name
-	link, err := r.getBridgeLink(ctx, bridgeName)
+	link, err := r.getBridgeLink(bridgeName)
 	if err != nil {
 		if errors.Is(err, syscall.ENODEV) {
 			log.V(1).Info("bridge link does not exist, skipping deletion")
@@ -350,7 +350,7 @@ func (r *NodeBridgesReconciler) performBridgeLinkCleanup(ctx context.Context, br
 	return nil
 }
 
-func (r *NodeBridgesReconciler) getBridgeLink(ctx context.Context, bridgeName string) (*netlink.Bridge, error) {
+func (r *NodeBridgesReconciler) getBridgeLink(bridgeName string) (*netlink.Bridge, error) {
 	// Read the bridge link info back from netlink, populating fields set by the kernel
 	link, err := netlink.LinkByName(bridgeName)
 	if err != nil {
@@ -390,7 +390,7 @@ func (r *NodeBridgesReconciler) ensureBridgeInDesiredState(ctx context.Context, 
 		return fmt.Errorf("failed to ensure bridge exists: %w", err)
 	}
 
-	link, err := r.getBridge(ctx, bridge.Spec.InterfaceName)
+	link, err := r.getBridge(bridge.Spec.InterfaceName)
 	if err != nil {
 		return fmt.Errorf("unable to get bridge %s: %w", bridge.Spec.InterfaceName, err)
 	}
@@ -431,7 +431,7 @@ func (r *NodeBridgesReconciler) ensureBridgeExists(ctx context.Context, bridgeNa
 	return fmt.Errorf("unable to add bridge link %s: %w", bridgeName, err)
 }
 
-func (r *NodeBridgesReconciler) getBridge(ctx context.Context, bridgeName string) (*netlink.Bridge, error) {
+func (r *NodeBridgesReconciler) getBridge(bridgeName string) (*netlink.Bridge, error) {
 	// Read the bridge link info back from netlink, populating fields set by the kernel
 	link, err := netlink.LinkByName(bridgeName)
 	if err != nil {

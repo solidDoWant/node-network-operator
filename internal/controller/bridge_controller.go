@@ -61,16 +61,12 @@ func NewBridgeReconciler(mgr ctrl.Manager) *BridgeReconciler {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *BridgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
 	// Get the bridge resource from the informer cache
 	var bridge bridgeoperatorv1alpha1.Bridge
 	if err := r.Get(ctx, req.NamespacedName, &bridge); err != nil {
-		log.Error(err, "unable to fetch Bridge")
+		logf.FromContext(ctx).Error(err, "unable to fetch Bridge")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-
-	log = log.WithValues("bridge", bridge.Spec.InterfaceName)
 
 	// Handle deletion of the bridge resource
 	if !bridge.DeletionTimestamp.IsZero() {
@@ -167,23 +163,6 @@ func (r *BridgeReconciler) performDeletion(ctx context.Context, bridge *bridgeop
 		}
 
 		return fmt.Errorf("failed to remove finalizer from bridge resource %s: %w", bridge.Name, err)
-	}
-
-	return nil
-}
-
-func (r *BridgeReconciler) removeFinalizer(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	if !controllerutil.RemoveFinalizer(bridge, bridgeFinalizerName) {
-		return nil
-	}
-
-	if err := r.Patch(ctx, bridge, client.Apply); err != nil {
-		if apierrors.IsNotFound(err) {
-			// The resource has already been deleted, nothing to do
-			return nil
-		}
-
-		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
 	return nil
