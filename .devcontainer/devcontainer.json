@@ -14,6 +14,13 @@
 			"version": "latest",
 			"helm": "latest",
 			"minikube": "latest"
+		},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"moby": true,
+			"installDockerBuildx": true,
+			"installDockerComposeSwitch": true,
+			"version": "latest",
+			"dockerDashComposeVersion": "v2"
 		}
 	},
 	"privileged": true,
