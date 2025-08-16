@@ -4,14 +4,20 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 
+	"github.com/elliotchance/pie/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -24,11 +30,12 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	ctx       context.Context
-	cancel    context.CancelFunc
-	testEnv   *envtest.Environment
-	cfg       *rest.Config
-	k8sClient client.Client
+	ctx        context.Context
+	cancel     context.CancelFunc
+	testEnv    *envtest.Environment
+	cfg        *rest.Config
+	k8sClient  client.Client
+	k8sCluster cluster.Cluster
 )
 
 func TestControllers(t *testing.T) {
@@ -64,9 +71,62 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	// Build a controller-runtime cluster with the test environment config.
+	// Configure the client builder to not cache any known types. The purpose of this test is not
+	// to test the caching mechanism, but rather to ensure that the controller logic works correctly.
+	// Caching makes tests significantly more painful to write and maintain, and does not provide
+	// any additional value in this context.
+	k8sObjectTypes := pie.Values(scheme.Scheme.AllKnownTypes())
+	k8sObjectInstances := make([]client.Object, 0, len(k8sObjectTypes))
+	for _, t := range k8sObjectTypes {
+		if k8sObjectInstance, ok := reflect.New(t).Interface().(client.Object); ok {
+			k8sObjectInstances = append(k8sObjectInstances, k8sObjectInstance)
+		}
+	}
+
+	k8sCluster, err = cluster.New(cfg, func(o *cluster.Options) {
+		o.Scheme = scheme.Scheme
+		o.Client.Cache = &client.CacheOptions{
+			DisableFor: k8sObjectInstances,
+		}
+	})
 	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sCluster).NotTo(BeNil())
+
+	k8sClient = k8sCluster.GetClient()
 	Expect(k8sClient).NotTo(BeNil())
+
+	// Run the cluster tasks in a separate goroutine to avoid blocking the test suite.
+	// This will handle things like syncing informer caches.
+	go func() {
+		Expect(k8sCluster.Start(ctx)).NotTo(HaveOccurred(), "Cluster should run without error")
+	}()
+
+	syncCtx, cancelSync := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelSync()
+	Expect(k8sCluster.GetCache().WaitForCacheSync(syncCtx)).To(BeTrue(), "Cache should be synced before proceeding")
+
+	// Save the kubeconfig to ~/.kube/test-config for debugging purposes
+	Expect(os.MkdirAll(clientcmd.RecommendedConfigDir, 0755)).To(Succeed())
+	clusterConfig := k8sCluster.GetConfig()
+
+	clientCmdConfig := api.NewConfig()
+	clientCmdConfig.Clusters["test-cluster"] = &api.Cluster{
+		Server:                   clusterConfig.Host,
+		CertificateAuthorityData: clusterConfig.CAData,
+	}
+	clientCmdConfig.AuthInfos["test-cluster-user"] = &api.AuthInfo{
+		ClientCertificateData: clusterConfig.CertData,
+		ClientKeyData:         clusterConfig.KeyData,
+	}
+	clientCmdConfig.Contexts["test-context"] = &api.Context{
+		Cluster:  "test-cluster",
+		AuthInfo: "test-cluster-user",
+	}
+	clientCmdConfig.CurrentContext = "test-context"
+
+	Expect(clientcmd.WriteToFile(*clientCmdConfig, filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Succeed(),
+		"Failed to write kubeconfig to %s", filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))
 })
 
 var _ = AfterSuite(func() {
@@ -74,6 +134,9 @@ var _ = AfterSuite(func() {
 	cancel()
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
+
+	Expect(os.Remove(filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Succeed(),
+		"Failed to remove kubeconfig file %s", filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))
 })
 
 // getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.

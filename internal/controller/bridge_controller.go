@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -26,7 +27,7 @@ import (
 	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
 )
 
-var bridgeFinalizerName = bridgeoperatorv1alpha1.GroupVersion.Group
+var bridgeFinalizerName = fmt.Sprintf("%s/%s", bridgeoperatorv1alpha1.GroupVersion.Group, "bridge-finalizer")
 
 // BridgeReconciler reconciles a Bridge object
 type BridgeReconciler struct {
@@ -35,18 +36,13 @@ type BridgeReconciler struct {
 	recorder record.EventRecorder
 }
 
-func NewBridgeReconciler(mgr ctrl.Manager) *BridgeReconciler {
+func NewBridgeReconciler(cluster cluster.Cluster) *BridgeReconciler {
 	return &BridgeReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		recorder: mgr.GetEventRecorderFor("bridge-controller"),
+		Client:   cluster.GetClient(),
+		Scheme:   cluster.GetScheme(),
+		recorder: cluster.GetEventRecorderFor("bridge-controller"),
 	}
 }
-
-// TODO:
-// * validation webhook
-//    * validate interface name
-//    * validate MTU
 
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/status,verbs=patch
@@ -67,13 +63,14 @@ func (r *BridgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		logf.FromContext(ctx).Error(err, "unable to fetch Bridge")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	oldBridge := bridge.DeepCopy()
 
 	// Handle deletion of the bridge resource
 	if !bridge.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, &bridge)
+		return r.handleDeletion(ctx, oldBridge, &bridge)
 	}
 
-	if err := r.ensureFinalizerExists(ctx, &bridge); err != nil {
+	if err := r.ensureFinalizerExists(ctx, oldBridge, &bridge); err != nil {
 		condition := metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
@@ -81,102 +78,94 @@ func (r *BridgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			Message: fmt.Sprintf("Failed to ensure finalizer exists: %v", err),
 		}
 
-		return r.handleError(ctx, &bridge, condition, err, "failed to ensure finalizer exists for bridge")
+		return r.handleError(ctx, oldBridge, &bridge, condition, err, "failed to ensure finalizer exists for bridge")
 	}
 
-	if err := r.updateNodeBridges(ctx, &bridge); err != nil {
+	if err := r.updateNodeBridges(ctx, oldBridge, &bridge); err != nil {
 		condition := metav1.Condition{
 			Type:    "Ready",
 			Status:  metav1.ConditionFalse,
 			Reason:  "NodeBridgesUpdateFailed",
 			Message: fmt.Sprintf("Failed to update all NodeBridges resources: %v", err),
 		}
-		return r.handleError(ctx, &bridge, condition, err, "failed to update NodeBridges resources for all nodes")
+		return r.handleError(ctx, oldBridge, &bridge, condition, err, "failed to update NodeBridges resources for all nodes")
 	}
 
 	// Update the status of the bridge resource
 	condition := metav1.Condition{
 		Type:   "Ready",
 		Status: metav1.ConditionTrue,
+		Reason: "ReconcileSuccessful",
 	}
 	meta.SetStatusCondition(&bridge.Status.Conditions, condition)
-	return ctrl.Result{}, r.updateStatus(ctx, &bridge)
+	return ctrl.Result{}, r.updateStatus(ctx, oldBridge, &bridge)
 }
 
 // handleError handles errors during reconciliation, updating the Bridge status with the error condition.
 // If an error occurs while updating the conditions, it logs the error and fires an event with the error message.
-func (r *BridgeReconciler) handleError(ctx context.Context, nodeBridges *bridgeoperatorv1alpha1.Bridge, condition metav1.Condition, err error, msg string, args ...interface{}) (ctrl.Result, error) {
+func (r *BridgeReconciler) handleError(ctx context.Context, oldBridge, newBridge *bridgeoperatorv1alpha1.Bridge, condition metav1.Condition, err error, msg string, args ...any) (ctrl.Result, error) {
 	logf.FromContext(ctx).Error(err, msg, args...)
-	meta.SetStatusCondition(&nodeBridges.Status.Conditions, condition)
-	return ctrl.Result{}, r.updateStatus(ctx, nodeBridges)
+	meta.SetStatusCondition(&newBridge.Status.Conditions, condition)
+	return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, oldBridge, newBridge))
 }
 
-func (r *BridgeReconciler) handleDeletion(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) (ctrl.Result, error) {
+func (r *BridgeReconciler) handleDeletion(ctx context.Context, oldBridge, newBridge *bridgeoperatorv1alpha1.Bridge) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	if !controllerutil.ContainsFinalizer(bridge, bridgeFinalizerName) {
+	if !controllerutil.ContainsFinalizer(newBridge, bridgeFinalizerName) {
 		log.V(1).Info("no finalizer present, not performing cleanup")
 		return ctrl.Result{}, nil
 	}
 
 	log.Info("deleting Bridge resources")
-	if err := r.performDeletion(ctx, bridge); err != nil {
+	if err := r.removeFromNodeBridges(ctx, newBridge, nil); err != nil {
 		condition := metav1.Condition{
 			Type:    "Cleanup",
 			Status:  metav1.ConditionFalse,
-			Reason:  "CleanupFailed",
-			Message: fmt.Sprintf("Failed to clean up bridge %s: %v", bridge.Spec.InterfaceName, err),
+			Reason:  "NodeBridgesCleanupFailed",
+			Message: fmt.Sprintf("Failed to remove bridge from all NodeBridges resources: %v", err),
 		}
 
-		return r.handleError(ctx, bridge, condition, err, "failed to clean up all bridge resources")
+		return r.handleError(ctx, oldBridge, newBridge, condition, err, "failed to remove bridge from all NodeBridges resources")
 	}
 
 	readyCondition := metav1.Condition{
 		Type:    "Ready",
 		Status:  metav1.ConditionFalse,
 		Reason:  "Deleted",
-		Message: fmt.Sprintf("Bridge %s has been deleted", bridge.Spec.InterfaceName),
+		Message: fmt.Sprintf("Bridge %s has been deleted", newBridge.Spec.InterfaceName),
 	}
 	cleanupCondition := metav1.Condition{
 		Type:    "Cleanup",
 		Status:  metav1.ConditionTrue,
 		Reason:  "CleanupSuccessful",
-		Message: fmt.Sprintf("Bridge %s has been cleaned up successfully", bridge.Spec.InterfaceName),
+		Message: fmt.Sprintf("Bridge %s has been cleaned up successfully", newBridge.Spec.InterfaceName),
 	}
 
-	meta.SetStatusCondition(&bridge.Status.Conditions, readyCondition)
-	meta.SetStatusCondition(&bridge.Status.Conditions, cleanupCondition)
-	return ctrl.Result{}, client.IgnoreNotFound(r.updateStatus(ctx, bridge))
-}
-
-func (r *BridgeReconciler) performDeletion(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	if err := r.removeFromNodeBridges(ctx, bridge, nil); err != nil {
-		return fmt.Errorf("failed to remove bridge from all NodeBridges resources: %w", err)
-	}
+	meta.SetStatusCondition(&newBridge.Status.Conditions, readyCondition)
+	meta.SetStatusCondition(&newBridge.Status.Conditions, cleanupCondition)
 
 	// Remove the finalizer, allowing the resource to be deleted
-	controllerutil.RemoveFinalizer(bridge, bridgeFinalizerName)
-	if err := r.Patch(ctx, bridge, client.Apply); err != nil {
-		if apierrors.IsNotFound(err) {
-			// The resource has already been deleted, nothing to do
-			return nil
-		}
-
-		return fmt.Errorf("failed to remove finalizer from bridge resource %s: %w", bridge.Name, err)
+	controllerutil.RemoveFinalizer(newBridge, bridgeFinalizerName)
+	if err := r.Patch(ctx, newBridge, client.MergeFrom(oldBridge)); err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from bridge resource %s: %w", newBridge.Name, err)
 	}
 
-	return nil
+	return ctrl.Result{}, nil
+	// return ctrl.Result{}, client.IgnoreNotFound(r.updateStatus(ctx, oldBridge, newBridge))
 }
 
 // Ensure the finalizer exists on the Bridge resource, so that it can be cleaned up properly
-func (r *BridgeReconciler) ensureFinalizerExists(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	if !controllerutil.AddFinalizer(bridge, bridgeFinalizerName) {
+func (r *BridgeReconciler) ensureFinalizerExists(ctx context.Context, oldBridge, newBridge *bridgeoperatorv1alpha1.Bridge) error {
+	if !controllerutil.AddFinalizer(newBridge, bridgeFinalizerName) {
 		return nil
 	}
 
-	if err := r.SubResource("finalizer").Patch(ctx, bridge, client.Apply); err != nil {
+	err := r.Patch(ctx, newBridge, client.MergeFrom(oldBridge))
+	if err != nil {
 		return fmt.Errorf("failed to add finalizer: %w", err)
 	}
+	*oldBridge = *newBridge.DeepCopy()
 
 	return nil
 }
@@ -196,8 +185,8 @@ func (r *BridgeReconciler) getMatchingNodes(ctx context.Context, bridge *bridgeo
 	return matchingNodes.Items, nil
 }
 
-func (r *BridgeReconciler) updateNodeBridges(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
-	nodes, err := r.getMatchingNodes(ctx, bridge)
+func (r *BridgeReconciler) updateNodeBridges(ctx context.Context, oldBridge, newBridge *bridgeoperatorv1alpha1.Bridge) error {
+	nodes, err := r.getMatchingNodes(ctx, newBridge)
 	if err != nil {
 		return fmt.Errorf("failed to get matching node names: %w", err)
 	}
@@ -207,13 +196,13 @@ func (r *BridgeReconciler) updateNodeBridges(ctx context.Context, bridge *bridge
 		Status: metav1.ConditionUnknown,
 		Reason: "ReconcileStarted",
 	}
-	meta.SetStatusCondition(&bridge.Status.Conditions, condition)
+	meta.SetStatusCondition(&newBridge.Status.Conditions, condition)
 
-	if err := r.removeFromNodeBridges(ctx, bridge, nodes); err != nil {
+	if err := r.removeFromNodeBridges(ctx, newBridge, nodes); err != nil {
 		return fmt.Errorf("failed to remove bridge from all undesired NodeBridges resources: %w", err)
 	}
 
-	if err := r.registerWithNodeBridges(ctx, bridge, nodes); err != nil {
+	if err := r.registerWithNodeBridges(ctx, oldBridge, newBridge, nodes); err != nil {
 		return fmt.Errorf("failed to register bridge with NodeBridges resources: %w", err)
 	}
 
@@ -237,6 +226,7 @@ func (r *BridgeReconciler) removeFromNodeBridges(ctx context.Context, bridge *br
 
 			return fmt.Errorf("failed to get NodeBridges resource for node %s: %w", nodeBridgesName, err)
 		}
+		oldNodeBridges := nodeBridges.DeepCopy()
 
 		if !slices.Contains(nodeBridges.Spec.MatchingBridges, bridge.Name) {
 			// Skip the resource if it does not contain the bridge
@@ -247,7 +237,7 @@ func (r *BridgeReconciler) removeFromNodeBridges(ctx context.Context, bridge *br
 			return bridgeName != bridge.Name
 		})
 
-		if err := r.Patch(ctx, &nodeBridges, client.Apply); err != nil {
+		if err := r.Patch(ctx, &nodeBridges, client.MergeFrom(oldNodeBridges)); err != nil {
 			if apierrors.IsNotFound(err) {
 				// NodeBridges resource does not exist, nothing to do
 				return nil
@@ -270,14 +260,14 @@ func (r *BridgeReconciler) removeFromNodeBridges(ctx context.Context, bridge *br
 	return nil
 }
 
-func (r *BridgeReconciler) registerWithNodeBridges(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge, nodes []corev1.Node) error {
+func (r *BridgeReconciler) registerWithNodeBridges(ctx context.Context, oldBridge, newBridge *bridgeoperatorv1alpha1.Bridge, nodes []corev1.Node) error {
 	// Doing this first ensures that the bridge status always contains at least the nodes that match the bridge's node selector
 	// even if one or more NodeBridges resources fail to be created or updated.
 	// This is important because the bridge status is used to track which NodeBridges resources may need to be cleaned up upon deletion.
-	bridge.Status.MatchedNodes = pie.Map(nodes, func(node corev1.Node) string {
+	newBridge.Status.MatchedNodes = pie.Map(nodes, func(node corev1.Node) string {
 		return node.Name
 	})
-	if err := r.updateStatus(ctx, bridge); err != nil {
+	if err := r.updateStatus(ctx, oldBridge, newBridge); err != nil {
 		return fmt.Errorf("failed to update bridge status with matched nodes: %w", err)
 	}
 
@@ -298,8 +288,8 @@ func (r *BridgeReconciler) registerWithNodeBridges(ctx context.Context, bridge *
 				return fmt.Errorf("failed to set owner reference: %w", err)
 			}
 
-			if slices.Contains(nodeBridges.Spec.MatchingBridges, bridge.Name) {
-				nodeBridges.Spec.MatchingBridges = append(nodeBridges.Spec.MatchingBridges, bridge.Name)
+			if slices.Contains(nodeBridges.Spec.MatchingBridges, newBridge.Name) {
+				nodeBridges.Spec.MatchingBridges = append(nodeBridges.Spec.MatchingBridges, newBridge.Name)
 			}
 
 			return nil
@@ -313,15 +303,16 @@ func (r *BridgeReconciler) registerWithNodeBridges(ctx context.Context, bridge *
 	return errors.Join(errs...)
 }
 
-// updateBridgeStatus updates the status of the Bridge resource with the given condition.
-func (r *BridgeReconciler) updateStatus(ctx context.Context, bridge *bridgeoperatorv1alpha1.Bridge) error {
+// updateStatus updates the status of the Bridge resource with the given condition.
+func (r *BridgeReconciler) updateStatus(ctx context.Context, oldBridge, newBridge *bridgeoperatorv1alpha1.Bridge) error {
 	log := logf.FromContext(ctx)
 
-	if err := r.Status().Patch(ctx, bridge, client.Apply); err != nil {
+	if err := r.Status().Patch(ctx, newBridge, client.MergeFrom(oldBridge)); err != nil {
 		log.Error(err, "unable to patch Bridge status")
-		r.recorder.Eventf(bridge, "Warning", "StatusUpdateFailed", "Failed to update status for bridge: %v", err)
+		r.recorder.Eventf(newBridge, "Warning", "StatusUpdateFailed", "Failed to update status for bridge: %v", err)
 		return fmt.Errorf("failed to update bridge status: %w", err)
 	}
+	*oldBridge = *newBridge.DeepCopy()
 
 	log.V(1).Info("bridge status updated")
 	return nil
