@@ -1,3 +1,5 @@
+MAKEFLAGS += --no-print-directory
+
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
@@ -54,8 +56,9 @@ fmt: ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet: $(GINKGO_NETNS_CHECK) ## Run go vet against code.
 	go vet ./...
+	go vet -vettool=$(GINKGO_NETNS_CHECK) ./...
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
@@ -165,10 +168,15 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 ##@ Dependencies
 
+TOOLING_DIR ?= $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tooling
+
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
+
+print-localbin:
+	@echo $(LOCALBIN)
 
 ## Tool Binaries
 KUBECTL ?= kubectl
@@ -177,6 +185,7 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GINKGO_NETNS_CHECK = $(LOCALBIN)/ginkgo-netns-check
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
@@ -216,6 +225,11 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: ginkgo-netns-check
+ginkgo-netns-check: $(GINKGO_NETNS_CHECK) ## Build ginkgo-netns-check if necessary.
+$(GINKGO_NETNS_CHECK): $(LOCALBIN)
+	@$(MAKE) -C $(TOOLING_DIR) build
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
