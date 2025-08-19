@@ -64,11 +64,11 @@ vet: $(GINKGO_NETNS_CHECK) ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo run -race -cover -vet="" $$(go list ./... | grep -v /e2e | sed "s~$$(go list -m)/~~")
 
-# TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
-# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
-# CertManager is installed by default; skip with:
-# - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= bridge-operator-test-e2e
+
+.PHONY: print-kind-cluster-name
+print-kind-cluster-name:
+	@echo $(KIND_CLUSTER)
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist

@@ -23,7 +23,7 @@ var (
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
-	projectImage = "example.com/bridge-operator:v0.0.1"
+	projectImage = "ghcr.io/soliddowant/bridge-operator:v0.0.1"
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -37,6 +37,15 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	By("ensuring that the kind cluster name is set")
+	// This var is used by `LoadImageToKindClusterWithName` and other functions
+	if os.Getenv("KIND_CLUSTER") == "" {
+		kindClusterName, err := utils.Run(exec.Command("make", "print-kind-cluster-name"))
+		Expect(err).NotTo(HaveOccurred(), "Failed to get the kind cluster name")
+		Expect(kindClusterName).NotTo(BeEmpty(), "Kind cluster name should not be empty")
+		os.Setenv("KIND_CLUSTER", kindClusterName)
+	}
+
 	By("building the manager(Operator) image")
 	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 	_, err := utils.Run(cmd)
