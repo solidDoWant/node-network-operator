@@ -288,7 +288,7 @@ func (r *BridgeReconciler) registerWithNodeBridges(ctx context.Context, oldBridg
 				return fmt.Errorf("failed to set owner reference: %w", err)
 			}
 
-			if slices.Contains(nodeBridges.Spec.MatchingBridges, newBridge.Name) {
+			if !slices.Contains(nodeBridges.Spec.MatchingBridges, newBridge.Name) {
 				nodeBridges.Spec.MatchingBridges = append(nodeBridges.Spec.MatchingBridges, newBridge.Name)
 			}
 

@@ -28,7 +28,7 @@ var _ = Describe("NodeBridges Controller", func() {
 			NamespacedName: typeNamespacedName,
 		}
 
-		BeforeEach(func() {
+		BeforeEach(withTestNetworkNamespace(func() {
 			By("creating a matching node for the NodeBridges resource")
 			var node corev1.Node
 			if err := k8sClient.Get(ctx, typeNamespacedName, &node); err != nil && errors.IsNotFound(err) {
@@ -51,9 +51,9 @@ var _ = Describe("NodeBridges Controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
-		})
+		}))
 
-		AfterEach(func() {
+		AfterEach(withTestNetworkNamespace(func() {
 			var nodeBridges bridgeoperatorv1alpha1.NodeBridges
 			Expect(k8sClient.Get(ctx, typeNamespacedName, &nodeBridges)).To(Succeed())
 
@@ -65,11 +65,11 @@ var _ = Describe("NodeBridges Controller", func() {
 
 			By("Cleanup the specific node instance")
 			Expect(k8sClient.Delete(ctx, &node)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
+		}))
+		It("should successfully reconcile the resource", withTestNetworkNamespace(func() {
 			By("Reconciling the created resource")
 
 			Expect(NewNodeBridgesReconciler(k8sCluster, nodeName).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
-		})
+		}))
 	})
 })
