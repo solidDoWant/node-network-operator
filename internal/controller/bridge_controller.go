@@ -49,7 +49,7 @@ func NewBridgeReconciler(cluster cluster.Cluster) *BridgeReconciler {
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/finalizers,verbs=patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=list;watch
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -226,6 +226,23 @@ func (r *BridgeReconciler) removeFromNodeBridges(ctx context.Context, bridge *br
 			return fmt.Errorf("failed to get NodeBridges resource for node %s: %w", nodeBridgesName, err)
 		}
 		oldNodeBridges := nodeBridges.DeepCopy()
+
+		// Check if the node still exists. If it does not, which can happen if the node was deleted without foreground cascade deletion,
+		// then the NodeBridges finalizer should be removed so that the resource can be deleted. If the node is deleted, it is assumed
+		// that the daemonset controller that was running on that node was terminated, and will be unable to remove the finalizer itself.
+		// Because this controller respects leadership elections, there should only be one controller that is attempting to remove the
+		// finalizer.
+		if !nodeBridges.DeletionTimestamp.IsZero() && controllerutil.ContainsFinalizer(&nodeBridges, nodeBridgesFinalizerName) {
+			var node corev1.Node
+			if err := r.Get(ctx, client.ObjectKey{Name: nodeBridgesName}, &node); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return fmt.Errorf("failed to get node %s while checking if the NodeBridges finalizer should be removed: %w", nodeBridgesName, err)
+				}
+
+				// Node does not exist, remove the finalizer so that the NodeBridges resource can be deleted
+				controllerutil.RemoveFinalizer(&nodeBridges, nodeBridgesFinalizerName)
+			}
+		}
 
 		if !slices.Contains(nodeBridges.Spec.MatchingBridges, bridge.Name) {
 			// Skip the resource if it does not contain the bridge
