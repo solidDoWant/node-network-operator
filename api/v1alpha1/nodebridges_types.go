@@ -30,11 +30,11 @@ type NodeBridgesStatus struct {
 	// +optional
 	LinkConditions map[string]NodeBridgesStatusConditions `json:"linkConditions,omitempty"`
 
-	// LastAttemptedBridges is a list of bridges that were for which deployment was previously attempted
-	//  on the node. This is useful for tracking changes in the node's bridge configuration.
+	// LastAttemptedBridgeLinks is a list of bridge links that were for which deployment was previously
+	// attempted on the node. This is useful for tracking changes in the node's bridge configuration.
 	// +listType=set
 	// +optional
-	LastAttemptedBridges []string `json:"deployedLinks,omitempty"`
+	LastAttemptedBridgeLinks []string `json:"deployedLinks,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -189,17 +189,23 @@ var _ = Describe("Bridge Controller", func() {
 			var nodes corev1.NodeList
 			Expect(k8sClient.List(ctx, &nodes)).To(Succeed(), "Failed to list nodes")
 			for _, node := range nodes.Items {
+				By(fmt.Sprintf("Cleanup the node %s", node.Name))
 				Expect(k8sClient.Delete(ctx, &node)).To(Succeed(), "Failed to delete node %s", node.Name)
-
 				var getNode corev1.Node
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &getNode)).ToNot(Succeed(), "Node should be deleted after reconciliation")
 
+				By(fmt.Sprintf("Cleanup the NodeBridges for node %s", node.Name))
 				// While these are owned by the node, they are not deleted automatically because envtest does not deploy the kube-controller-manager.
 				// See https://github.com/kubernetes-sigs/controller-runtime/issues/3083 for details.
 				var nodeBridges bridgeoperatorv1alpha1.NodeBridges
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeBridges)).To(Succeed(), "Failed to get node bridges for node %s", node.Name)
+				// This test does not need to verify the finalizer logic of the NodeBridges resource.
+				nodeBridges.Finalizers = nil
+				Expect(k8sClient.Update(ctx, &nodeBridges)).To(Succeed(), "Failed to remove finalizers from node bridges for node %s", node.Name)
 				Expect(k8sClient.Delete(ctx, &nodeBridges)).To(Succeed(), "Failed to delete node bridges for node %s", node.Name)
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeBridges)).ToNot(Succeed(), "NodeBridges should be deleted after reconciliation")
 
+				By(fmt.Sprintf("Reconcile the Bridge resources after node %s deletion", node.Name))
 				for _, bridge := range bridges {
 					Expect(reconciler.Reconcile(ctx, bridge.request)).To(Equal(reconcile.Result{}))
 				}
@@ -227,6 +233,7 @@ var _ = Describe("Bridge Controller", func() {
 				var resource bridgeoperatorv1alpha1.Bridge
 				Expect(k8sClient.Get(ctx, bridge.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s", name)
 				Expect(resource.Status.MatchedNodes).To(ConsistOf(bridge.expectedMatchedNodes), "The MatchedNodes should match the expected nodes for resource %s", name)
+				Expect(resource.Finalizers).To(ContainElement(bridgeFinalizerName), "The resource should have the finalizer")
 
 				// Verify that the nodebridges resources contain the expected bridges
 				By(fmt.Sprintf("Verifying the NodeBridges for resource %s", name))

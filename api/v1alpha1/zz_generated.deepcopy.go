@@ -223,8 +223,8 @@ func (in *NodeBridgesStatus) DeepCopyInto(out *NodeBridgesStatus) {
 			(*out)[key] = outVal
 		}
 	}
-	if in.LastAttemptedBridges != nil {
-		in, out := &in.LastAttemptedBridges, &out.LastAttemptedBridges
+	if in.LastAttemptedBridgeLinks != nil {
+		in, out := &in.LastAttemptedBridgeLinks, &out.LastAttemptedBridgeLinks
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}

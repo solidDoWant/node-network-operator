@@ -152,7 +152,6 @@ func (r *BridgeReconciler) handleDeletion(ctx context.Context, oldBridge, newBri
 	}
 
 	return ctrl.Result{}, nil
-	// return ctrl.Result{}, client.IgnoreNotFound(r.updateStatus(ctx, oldBridge, newBridge))
 }
 
 // Ensure the finalizer exists on the Bridge resource, so that it can be cleaned up properly
@@ -338,10 +337,15 @@ func (r *BridgeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&corev1.Node{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				node, ok := o.(*corev1.Node)
+				if !ok || node == nil {
+					return nil
+				}
+
 				return []reconcile.Request{
 					{
 						NamespacedName: client.ObjectKey{
-							Name: o.GetName(),
+							Name: node.GetName(),
 						},
 					},
 				}
@@ -357,6 +361,41 @@ func (r *BridgeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					},
 					UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
 						return labelChangedPredicate.Update(tue)
+					},
+					GenericFunc: func(tge event.TypedGenericEvent[client.Object]) bool {
+						return false
+					},
+				},
+			),
+		).
+		// Watch NodeBridges pending deletion, and reconcile matching bridges so that their status fields are updated
+		Watches(
+			&bridgeoperatorv1alpha1.NodeBridges{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				nodeBridges, ok := o.(*bridgeoperatorv1alpha1.NodeBridges)
+				if !ok || nodeBridges == nil {
+					return nil
+				}
+
+				return pie.Map(nodeBridges.Spec.MatchingBridges, func(bridgeName string) reconcile.Request {
+					return reconcile.Request{
+						NamespacedName: client.ObjectKey{
+							Name: bridgeName,
+						},
+					}
+				})
+			}),
+			builder.WithPredicates(
+				// Only trigger on events where the NodeBridges resource is being deleted.
+				predicate.Funcs{
+					CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
+						return false
+					},
+					DeleteFunc: func(tce event.TypedDeleteEvent[client.Object]) bool {
+						return false
+					},
+					UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+						return tue.ObjectNew.GetDeletionTimestamp() != nil
 					},
 					GenericFunc: func(tge event.TypedGenericEvent[client.Object]) bool {
 						return false
