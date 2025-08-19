@@ -272,6 +272,14 @@ var _ = Describe("Bridge Controller", func() {
 
 				By(fmt.Sprintf("Verifying the NodeBridges for resource %s after node deletion", name))
 				var nodeBridges bridgeoperatorv1alpha1.NodeBridges
+
+				if len(resource.Status.MatchedNodes) == 0 {
+					// If the resource has no matched nodes, it should not have a NodeBridges resource
+					// Normally the resource would exist pending deletion, but it is not reconciled at any point so the finalizer is never added.
+					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeBridges)).ToNot(Succeed(), "NodeBridges should not exist for node %s after deletion", nodeToDelete.Name)
+					continue
+				}
+
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeBridges)).To(Succeed(), "Failed to get node bridges for node %s after deletion", nodeToDelete.Name)
 				Expect(nodeBridges.Spec.MatchingBridges).ToNot(ContainElement(resource.Name), "The MatchedBridges should not contain the resource %s for deleted node %s", resource.Name, nodeToDelete.Name)
 			}

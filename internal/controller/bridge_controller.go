@@ -47,7 +47,7 @@ func NewBridgeReconciler(cluster cluster.Cluster) *BridgeReconciler {
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/status,verbs=patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=bridges/finalizers,verbs=patch
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodebridges,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
@@ -253,13 +253,17 @@ func (r *BridgeReconciler) removeFromNodeBridges(ctx context.Context, bridge *br
 			return bridgeName != bridge.Name
 		})
 
-		if err := r.Patch(ctx, &nodeBridges, client.MergeFrom(oldNodeBridges)); err != nil {
-			if apierrors.IsNotFound(err) {
-				// NodeBridges resource does not exist, nothing to do
-				return nil
-			}
-
-			return fmt.Errorf("failed to patch NodeBridges resource for node %s: %w", nodeBridgesName, err)
+		// Patch or delete the NodeBridges resource, depending on whether it still has any matching bridges
+		var err error
+		if len(nodeBridges.Spec.MatchingBridges) == 0 {
+			logf.FromContext(ctx).Info("deleting NodeBridges resource", "node", nodeBridgesName)
+			err = r.Delete(ctx, &nodeBridges)
+		} else {
+			logf.FromContext(ctx).Info("patching NodeBridges resource", "node", nodeBridgesName)
+			err = r.Patch(ctx, &nodeBridges, client.MergeFrom(oldNodeBridges))
+		}
+		if err != nil {
+			return client.IgnoreNotFound(err)
 		}
 
 		// Remove the bridge from the status of the Bridge resource

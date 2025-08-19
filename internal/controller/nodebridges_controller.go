@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,6 +69,8 @@ func (r *NodeBridgesReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Get the NodeBridges instance from the informer cache
 	var nodeBridges bridgeoperatorv1alpha1.NodeBridges
 	if err := r.Get(ctx, req.NamespacedName, &nodeBridges); err != nil {
+		// This can happen right after a nodebridge is created for the first time, but before the informer cache is updated.
+		// In this case this is a non-issue, but there isn't really a programatic way to detect this, so just log it.
 		log.Error(err, "unable to fetch NodeBridges")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -292,13 +295,28 @@ func (r *NodeBridgesReconciler) ensureNoDuplicateInterfaceNames(nodeBridges *bri
 func (r *NodeBridgesReconciler) updateStatus(ctx context.Context, oldNodeBridges, nodeBridges *bridgeoperatorv1alpha1.NodeBridges) error {
 	log := logf.FromContext(ctx)
 
-	// Always attempt to patch the status, as the status could have been updated prior to this call
-	if err := r.Status().Patch(ctx, nodeBridges, client.MergeFrom(oldNodeBridges)); err != nil {
+	// Determine whether the entire resource needs a patch or just the status
+	// Ignore status changes, these always need to be applied and will always differ
+	newStatus := nodeBridges.Status.DeepCopy()
+	nodeBridges.Status = oldNodeBridges.Status
+	canPatchOnlyStatus := equality.Semantic.DeepEqual(oldNodeBridges, nodeBridges)
+	nodeBridges.Status = *newStatus
+
+	var err error
+	if canPatchOnlyStatus {
+		err = r.Status().Patch(ctx, nodeBridges, client.MergeFrom(oldNodeBridges))
+	} else {
+		err = r.Patch(ctx, nodeBridges, client.MergeFrom(oldNodeBridges))
+	}
+
+	if err != nil {
 		log.Error(err, "failed to patch NodeBridges status")
 		r.recorder.Eventf(nodeBridges, "Warning", "StatusUpdateFailed",
 			"Failed to update NodeBridges status: %v", err)
 		return fmt.Errorf("failed to patch NodeBridges status: %w", err)
 	}
+
+	// Update the oldNodeBridges to reflect the new object state
 	*oldNodeBridges = *nodeBridges.DeepCopy()
 
 	log.V(1).Info("NodeBridges status updated")
@@ -353,6 +371,10 @@ func (r *NodeBridgesReconciler) cleanupBridgeLink(ctx context.Context, nodeBridg
 	err := r.performBridgeLinkCleanup(ctx, bridgeName)
 	if err == nil {
 		delete(nodeBridges.Status.LinkConditions, bridgeName)
+		// All cleanup is done, so there is no further need to track this bridge link
+		nodeBridges.Status.LastAttemptedBridgeLinks = pie.Filter(nodeBridges.Status.LastAttemptedBridgeLinks, func(name string) bool {
+			return name != bridgeName
+		})
 		return nil
 	}
 
@@ -379,7 +401,7 @@ func (r *NodeBridgesReconciler) performBridgeLinkCleanup(ctx context.Context, br
 	// Get the bridge link by name
 	link, err := r.getBridgeLink(bridgeName)
 	if err != nil {
-		if errors.Is(err, syscall.ENODEV) {
+		if r.isLinkNotFoundError(err) {
 			log.V(1).Info("bridge link does not exist, skipping deletion")
 			return nil
 		}
@@ -388,13 +410,18 @@ func (r *NodeBridgesReconciler) performBridgeLinkCleanup(ctx context.Context, br
 	}
 
 	// Delete the bridge link
-	if err := netlink.LinkDel(link); err != nil && !errors.Is(err, syscall.ENODEV) {
+	if err := netlink.LinkDel(link); err != nil && !r.isLinkNotFoundError(err) {
 		log.Error(err, "failed to delete bridge link")
 		return err
 	}
 
 	log.Info("bridge link deleted")
 	return nil
+}
+
+func (r *NodeBridgesReconciler) isLinkNotFoundError(err error) bool {
+	var netlinkErr netlink.LinkNotFoundError
+	return errors.Is(err, syscall.ENODEV) || errors.As(err, &netlinkErr)
 }
 
 func (r *NodeBridgesReconciler) getBridgeLink(bridgeName string) (*netlink.Bridge, error) {

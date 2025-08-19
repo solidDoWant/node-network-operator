@@ -28,6 +28,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
-USER 65532:65532
+
+# This requires access to manage network interfaces, so run as UID 0 by default. On most systems only
+# CAP_NET_ADMIN is needed, but kind seems to specifically require running as UID 0 as well
+USER 0:0
 
 ENTRYPOINT ["/manager"]
