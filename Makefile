@@ -44,11 +44,11 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: $(CONTROLLER_GEN) ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: $(CONTROLLER_GEN) ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object paths="./..."
 
 .PHONY: fmt
@@ -206,7 +206,15 @@ $(KUSTOMIZE): $(LOCALBIN)
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+# 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+# This must be built locally until https://github.com/kubernetes-sigs/controller-tools/commit/7c982e071528c7c61510d0a297cd901f602aeaea
+# is released
+	$(eval SRCDIR := $(shell mktemp --directory /tmp/controller-tools-XXXXXX))
+	@echo "Building controller-gen from source..."
+	@git clone --depth 1 --revision b624019bbe8d5605fdb89b99d88882910a65ed14 https://github.com/kubernetes-sigs/controller-tools.git "$(SRCDIR)"
+	@cd "$(SRCDIR)" && GOOS="$(shell go env GOOS)" GOARCH="$(shell go env GOARCH)" RELEASE_BINARY=controller-gen make release-binary
+	@mv "$(SRCDIR)/out/controller-gen" "$(LOCALBIN)/controller-gen"
+	@rm -rf $(SRCDIR)
 
 .PHONY: setup-envtest
 setup-envtest: envtest ## Download the binaries required for ENVTEST in the local bin directory.

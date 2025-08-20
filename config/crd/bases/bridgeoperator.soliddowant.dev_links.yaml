@@ -1,0 +1,162 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.0.0-20250818134112-b624019bbe8d
+  name: links.bridgeoperator.soliddowant.dev
+spec:
+  group: bridgeoperator.soliddowant.dev
+  names:
+    kind: Link
+    listKind: LinkList
+    plural: links
+    singular: link
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Link is the Schema for the links API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of Link
+            properties:
+              bridge:
+                description: Bridge defines the desired state of the link as a bridge.
+                properties:
+                  mtu:
+                    description: |-
+                      MTU is the maximum transmission unit for the bridge interface.
+                      This should be at least as large as the largest frame payload that will be sent over the bridge.
+                      If not specified, the default MTU for the node will be used.
+                    format: int32
+                    maximum: 65535
+                    minimum: 68
+                    type: integer
+                type: object
+              interfaceName:
+                description: |-
+                  LinkName is the name that should be used for the actual network link.
+                  If a link interface with this name already exists, it will be adopted.
+                  If it does not exist, a new link will be created.
+                  It is the responsibility of the user to ensure that the link name is unique across selected nodes.
+                maxLength: 15
+                pattern: ^[^\s/]+$
+                type: string
+              nodeSelector:
+                description: NodeSelector is used to select nodes that the link should
+                  be deployed to.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              vxlan:
+                description: VXLAN defines the desired state of the link as a VXLAN.
+                properties:
+                  device:
+                    description: |-
+                      Device is the network interface used for vxlan-encapsulated traffic.
+                      If not specified, the default is to use the first interface that netlink can use when sending traffic to the
+                      multicast address - effectively `ip route get <multicast address>`.
+                    type: object
+                  multicastAddress:
+                    description: |-
+                      Address is the multicast address used for VXLAN encapsulation. The default address is scoped to the local
+                      subnet, and will not be forwarded by routers to other subnets.
+                    format: ipv4
+                    type: string
+                  port:
+                    default: 4789
+                    description: Port is the UDP port used for VXLAN encapsulation.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  remoteIPAddress:
+                    description: |-
+                      RemoteIPAddress defines the remote VTEP(s) for VXLAN traffic. This can refer to a single
+                      host, or a multicast group.
+                    type: string
+                  vnid:
+                    description: VNID is the Virtual Network Identifier for the underlay
+                      network.
+                    format: int32
+                    maximum: 16777215
+                    minimum: 1
+                    type: integer
+                type: object
+            required:
+            - interfaceName
+            type: object
+            x-kubernetes-validations:
+            - message: exactly one of the fields in [bridge vxlan] must be set
+              rule: '[has(self.bridge),has(self.vxlan)].filter(x,x==true).size() ==
+                1'
+          status:
+            description: status defines the observed state of Link
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
