@@ -22,6 +22,12 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the bridge-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- nodelinks_admin_role.yaml
+- nodelinks_editor_role.yaml
+- nodelinks_viewer_role.yaml
+- link_admin_role.yaml
+- link_editor_role.yaml
+- link_viewer_role.yaml
 - nodebridges_admin_role.yaml
 - nodebridges_editor_role.yaml
 - nodebridges_viewer_role.yaml

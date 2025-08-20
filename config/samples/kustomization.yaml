@@ -1,4 +1,6 @@
 ## Append samples of your project ##
 resources:
   - bridgeoperator_v1alpha1_bridge.yaml
+- bridgeoperator_v1alpha1_link.yaml
+- bridgeoperator_v1alpha1_nodelinks.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

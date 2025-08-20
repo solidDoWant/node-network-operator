@@ -4,6 +4,8 @@
 resources:
 - bases/bridgeoperator.soliddowant.dev_bridges.yaml
 - bases/bridgeoperator.soliddowant.dev_nodebridges.yaml
+- bases/bridgeoperator.soliddowant.dev_links.yaml
+- bases/bridgeoperator.soliddowant.dev_nodelinks.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
