@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -10,6 +11,8 @@ import (
 
 	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
 )
+
+var nodeLinksFinalizerName = fmt.Sprintf("nodelinks.%s/finalizer", bridgeoperatorv1alpha1.GroupVersion.Group)
 
 // NodeLinksReconciler reconciles a NodeLinks object
 type NodeLinksReconciler struct {

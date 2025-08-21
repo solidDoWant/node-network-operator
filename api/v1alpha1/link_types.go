@@ -5,7 +5,21 @@ import (
 )
 
 // LinkReference is a reference to another link resource.
-type LinkReference struct{}
+type LinkReference struct {
+	// Group is the API group of the referenced link resource.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:bridgeoperator.soliddowant.dev
+	Group string `json:"group,omitempty"`
+
+	// Kind is the kind of the referenced link resource.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:Link
+	Kind string `json:"kind,omitempty"`
+
+	// Name is the name of the referenced link resource.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+}
 
 // VXLANSpecs defines the desired state of the link as a VXLAN.
 type VXLANSpecs struct {
@@ -80,8 +94,17 @@ type LinkSpec struct {
 
 // LinkStatus defines the observed state of Link.
 type LinkStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Conditions is a list of conditions that apply to the bridge configuration.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+
+	// MatchedNodes is a list of node names that match the bridge's node selector.
+	// This is used to track which nodes the bridge is deployed to.
+	// +listType=atomic
+	// +optional
+	MatchedNodes []string `json:"matchedNodes,omitempty"`
 }
 
 // +kubebuilder:object:root=true
