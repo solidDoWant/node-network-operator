@@ -14,9 +14,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/elliotchance/pie/v2"
 	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
@@ -56,7 +61,8 @@ func NewLinkReconciler(mgr ctrl.Manager) *LinkReconciler {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *LinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithValues("link", req.Name)
+	logf.IntoContext(ctx, log)
 
 	// Fetch the Link instance
 	var link bridgeoperatorv1alpha1.Link
@@ -64,8 +70,6 @@ func (r *LinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		log.Error(err, "unable to fetch Link")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-
-	logf.IntoContext(ctx, logf.FromContext(ctx).WithValues("link", link.Name))
 
 	// Make a copy of the Link instance to avoid modifying the original. This allows for computing
 	// diffs for patch operations.
@@ -379,8 +383,81 @@ func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, li
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	labelChangedPredicate := predicate.LabelChangedPredicate{}
+
+	// Watch Link resources for spec changes
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&bridgeoperatorv1alpha1.Link{}).
+		For(&bridgeoperatorv1alpha1.Link{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		// Watch node changes for changes that would affect node selector matching
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				node, ok := o.(*corev1.Node)
+				if !ok || node == nil {
+					return nil
+				}
+
+				return []reconcile.Request{
+					{
+						NamespacedName: client.ObjectKey{
+							Name: node.GetName(),
+						},
+					},
+				}
+			}),
+			builder.WithPredicates(
+				// Trigger on any change that would affect what the node selector matches.
+				predicate.Funcs{
+					CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
+						return true
+					},
+					DeleteFunc: func(tce event.TypedDeleteEvent[client.Object]) bool {
+						return true
+					},
+					UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+						return labelChangedPredicate.Update(tue)
+					},
+					GenericFunc: func(tge event.TypedGenericEvent[client.Object]) bool {
+						return false
+					},
+				},
+			),
+		).
+		// Watch NodeBridges pending deletion, and reconcile matching bridges so that their status fields are updated
+		Watches(
+			&bridgeoperatorv1alpha1.NodeBridges{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				nodeBridges, ok := o.(*bridgeoperatorv1alpha1.NodeBridges)
+				if !ok || nodeBridges == nil {
+					return nil
+				}
+
+				return pie.Map(nodeBridges.Spec.MatchingBridges, func(bridgeName string) reconcile.Request {
+					return reconcile.Request{
+						NamespacedName: client.ObjectKey{
+							Name: bridgeName,
+						},
+					}
+				})
+			}),
+			builder.WithPredicates(
+				// Only trigger on events where the NodeBridges resource is being deleted.
+				predicate.Funcs{
+					CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
+						return false
+					},
+					DeleteFunc: func(tce event.TypedDeleteEvent[client.Object]) bool {
+						return false
+					},
+					UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+						return tue.ObjectNew.GetDeletionTimestamp() != nil
+					},
+					GenericFunc: func(tge event.TypedGenericEvent[client.Object]) bool {
+						return false
+					},
+				},
+			),
+		).
 		Named("link").
 		Complete(r)
 }
