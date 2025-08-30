@@ -16,7 +16,11 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
-require github.com/vishvananda/netns v0.0.5
+require (
+	github.com/dominikbraun/graph v0.23.0
+	github.com/vishvananda/netns v0.0.5
+	golang.org/x/sys v0.35.0
+)
 
 require (
 	cel.dev/expr v0.24.0 // indirect
@@ -80,7 +84,6 @@ require (
 	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/term v0.34.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/time v0.12.0 // indirect

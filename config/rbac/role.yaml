@@ -39,7 +39,6 @@ rules:
   - bridgeoperator.soliddowant.dev
   resources:
   - links
-  - nodelinks
   verbs:
   - create
   - delete
@@ -52,7 +51,6 @@ rules:
   - bridgeoperator.soliddowant.dev
   resources:
   - links/finalizers
-  - nodelinks/finalizers
   verbs:
   - update
 - apiGroups:
@@ -69,6 +67,7 @@ rules:
   - bridgeoperator.soliddowant.dev
   resources:
   - nodebridges
+  - nodelinks
   verbs:
   - create
   - delete
@@ -76,3 +75,10 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - bridgeoperator.soliddowant.dev
+  resources:
+  - nodelinks/finalizers
+  verbs:
+  - create
+  - patch

@@ -54,6 +54,9 @@ func NewLinkReconciler(mgr ctrl.Manager) *LinkReconciler {
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=links,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=links/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=links/finalizers,verbs=update
+// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -241,7 +244,6 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 			err = r.Delete(ctx, &nodeLinks)
 		} else {
 			logf.FromContext(ctx).Info("patching NodeLinks resource", "node", nodeLinksName)
-			// TODO this should be replaced when patchResource is extracted
 			err = r.Patch(ctx, &nodeLinks, client.MergeFrom(clusterStatenodeLinks))
 		}
 		if err != nil {
@@ -337,7 +339,10 @@ func (r *LinkReconciler) handleError(ctx context.Context, clusterStateLink, link
 	return ctrl.Result{}, errors.Join(err, r.patchResource(ctx, clusterStateLink, link))
 }
 
-// TODO extract this to a common function for all controllers
+// This cannot be extracted to a common function because it needs to be aware of the type of the resource being patched.
+// There is not a way to write this generically without several leaky assertions due to Go's lack of covariant support
+// (https://github.com/golang/go/issues/7512). Instead, this is copy/pasted for each reconciler that needs it, with only
+// the function signature (resource type, var names) differing.
 
 // patchResource updates the resource. If only a status update is needed, it patches the status only. This handles errors upon
 // update, and the result can be directly returned from the Reconcile function.

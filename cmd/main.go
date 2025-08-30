@@ -194,17 +194,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if err := (&controller.LinkReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err := controller.NewLinkReconciler(mgr).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Link")
 		os.Exit(1)
 	}
-	if err := (&controller.NodeLinksReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err := controller.NewNodeLinksReconciler(mgr, nodeName).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NodeLinks")
 		os.Exit(1)
 	}
