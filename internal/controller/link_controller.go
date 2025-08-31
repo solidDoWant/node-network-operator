@@ -16,6 +16,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -43,11 +44,11 @@ type LinkReconciler struct {
 	recorder record.EventRecorder
 }
 
-func NewLinkReconciler(mgr ctrl.Manager) *LinkReconciler {
+func NewLinkReconciler(cluster cluster.Cluster) *LinkReconciler {
 	return &LinkReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		recorder: mgr.GetEventRecorderFor("link-controller"),
+		Client:   cluster.GetClient(),
+		Scheme:   cluster.GetScheme(),
+		recorder: cluster.GetEventRecorderFor("link-controller"),
 	}
 }
 
@@ -161,7 +162,7 @@ func (r *LinkReconciler) handleDeletion(ctx context.Context, clusterStateLink, l
 	meta.SetStatusCondition(&link.Status.Conditions, cleanupCondition)
 
 	// Remove the finalizer, allowing the resource to be deleted
-	controllerutil.RemoveFinalizer(link, bridgeFinalizerName)
+	controllerutil.RemoveFinalizer(link, linkFinalizerName)
 
 	return ctrl.Result{}, r.patchResource(ctx, clusterStateLink, link)
 }
