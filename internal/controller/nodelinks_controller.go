@@ -835,7 +835,7 @@ func (r *NodeLinksReconciler) handleError(ctx context.Context, clusterStateNodeL
 	return ctrl.Result{}, errors.Join(err, r.patchResource(ctx, clusterStateNodeLinks, nodeLinks))
 }
 
-// setLinkCondition sets a condition for a specific link in the NodeBridges status.
+// setLinkCondition sets a condition for a specific link in the NodeLinks status.
 func (r *NodeLinksReconciler) setLinkCondition(nodeLinks *bridgeoperatorv1alpha1.NodeLinks, netlinkLinkName string, condition metav1.Condition) {
 	linkConditions, ok := nodeLinks.Status.NetlinkLinkConditions[netlinkLinkName]
 	if !ok {
@@ -891,7 +891,7 @@ func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNod
 		return fmt.Errorf("failed to patch %T status: %w", clusterStateNodeLinks, err)
 	}
 
-	// Update the oldNodeBridges to reflect the new object state
+	// Update the clusterStateNodeLinks to reflect the new object state
 	*clusterStateNodeLinks = *nodeLinks.DeepCopy()
 
 	log.V(1).Info(fmt.Sprintf("%T status updated", clusterStateNodeLinks))
