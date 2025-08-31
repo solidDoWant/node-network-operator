@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -39,12 +40,12 @@ type NodeLinksReconciler struct {
 	recorder record.EventRecorder
 }
 
-func NewNodeLinksReconciler(mgr ctrl.Manager, nodeName string) *NodeLinksReconciler {
+func NewNodeLinksReconciler(cluster cluster.Cluster, nodeName string) *NodeLinksReconciler {
 	return &NodeLinksReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		Client:   cluster.GetClient(),
+		Scheme:   cluster.GetScheme(),
 		nodeName: nodeName,
-		recorder: mgr.GetEventRecorderFor("nodelinks-controller"),
+		recorder: cluster.GetEventRecorderFor("nodelinks-controller"),
 	}
 }
 
