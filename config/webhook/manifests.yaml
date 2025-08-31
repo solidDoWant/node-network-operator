@@ -24,3 +24,23 @@ webhooks:
     resources:
     - bridges
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-bridgeoperator-soliddowant-dev-v1alpha1-link
+  failurePolicy: Fail
+  name: vlink-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - bridgeoperator.soliddowant.dev
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - links
+  sideEffects: None
