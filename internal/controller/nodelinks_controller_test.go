@@ -36,7 +36,7 @@ var _ = Describe("NodeLinks Controller", func() {
 			NamespacedName: typeNamespacedName,
 		}
 
-		BeforeEach(withTestNetworkNamespace(func() {
+		BeforeEach(func() {
 			By("creating a matching node for the NodeLinks resource")
 			node := &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -103,9 +103,9 @@ var _ = Describe("NodeLinks Controller", func() {
 				}).ShouldNot(Succeed())
 			}
 			Expect(k8sClient.Create(ctx, nodeLinks)).To(Succeed(), "Failed to create NodeLinks resource %s", nodeName)
-		}))
+		})
 
-		AfterEach(withTestNetworkNamespace(func() {
+		AfterEach(func() {
 			By("Cleanup the specific resource instance NodeLinks")
 			var nodeLinks bridgeoperatorv1alpha1.NodeLinks
 			err := k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)
@@ -146,9 +146,9 @@ var _ = Describe("NodeLinks Controller", func() {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, &link)
 				}).ShouldNot(Succeed(), "Link resource should be deleted after reconciliation")
 			}
-		}))
+		})
 
-		It("should handle reconciliation and error cases appropriately", withTestNetworkNamespace(func() {
+		It("should handle reconciliation and error cases appropriately", func() {
 			By("Reconciling the created resource")
 
 			result, err := NewNodeLinksReconciler(k8sCluster, nodeName).Reconcile(ctx, request)
@@ -173,9 +173,9 @@ var _ = Describe("NodeLinks Controller", func() {
 				By("Verifying success conditions when reconciliation succeeds")
 				Expect(meta.IsStatusConditionTrue(nodeLinks.Status.Conditions, "Ready")).To(BeTrue(), "The NodeLinks resource should be ready when reconciliation succeeds")
 			}
-		}))
+		})
 
-		It("should handle resource deletion gracefully", withTestNetworkNamespace(func() {
+		It("should handle resource deletion gracefully", func() {
 			By("Reconciling the created resource first")
 
 			result, _ := NewNodeLinksReconciler(k8sCluster, nodeName).Reconcile(ctx, request)
@@ -196,6 +196,6 @@ var _ = Describe("NodeLinks Controller", func() {
 				err := k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)
 				return err != nil
 			}).Should(BeTrue(), "NodeLinks resource should eventually be deleted")
-		}))
+		})
 	})
 })

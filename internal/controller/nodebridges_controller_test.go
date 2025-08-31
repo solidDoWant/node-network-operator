@@ -33,7 +33,7 @@ var _ = Describe("NodeBridges Controller", func() {
 			NamespacedName: typeNamespacedName,
 		}
 
-		BeforeEach(withTestNetworkNamespace(func() {
+		BeforeEach(func() {
 			By("creating a matching node for the NodeBridges resource")
 			node := &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -67,9 +67,9 @@ var _ = Describe("NodeBridges Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, nodeBridges)).To(Succeed(), "Failed to create NodeBridges resource %s", nodeName)
-		}))
+		})
 
-		AfterEach(withTestNetworkNamespace(func() {
+		AfterEach(func() {
 			By("Cleanup the specific resource instance NodeBridges")
 			var nodeBridges bridgeoperatorv1alpha1.NodeBridges
 			Expect(k8sClient.Get(ctx, typeNamespacedName, &nodeBridges)).To(Succeed())
@@ -93,8 +93,8 @@ var _ = Describe("NodeBridges Controller", func() {
 			Expect(k8sClient.Update(ctx, &bridge)).To(Succeed(), "Failed to remove finalizers from bridge resource %s", bridgeName)
 			Expect(k8sClient.Delete(ctx, &bridge)).To(Succeed(), "Failed to delete bridge resource %s", bridgeName)
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: bridgeName}, &bridge)).ToNot(Succeed(), "Bridge resource should be deleted after reconciliation")
-		}))
-		It("should successfully reconcile the resource", withTestNetworkNamespace(func() {
+		})
+		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 
 			Expect(NewNodeBridgesReconciler(k8sCluster, nodeName).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
@@ -114,7 +114,6 @@ var _ = Describe("NodeBridges Controller", func() {
 			Expect(bridgeLink).ToNot(BeNil(), "The bridge link should exist after reconciliation")
 			Expect(bridgeLink.Attrs().MTU).To(Equal(int(mtu)), "The bridge link should have the correct MTU")
 			Expect(bridgeLink.Type()).To(Equal("bridge"), "The bridge link should be of type bridge")
-
-		}))
+		})
 	})
 })

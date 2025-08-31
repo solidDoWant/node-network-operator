@@ -33,7 +33,7 @@ var _ = Describe("Link Controller", func() {
 		}
 		link := &bridgeoperatorv1alpha1.Link{}
 
-		BeforeEach(withTestNetworkNamespace(func() {
+		BeforeEach(func() {
 			By("creating the custom resource for the Kind Link")
 			err := k8sClient.Get(ctx, typeNamespacedName, link)
 			if err != nil && apierrors.IsNotFound(err) {
@@ -56,9 +56,9 @@ var _ = Describe("Link Controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
-		}))
+		})
 
-		AfterEach(withTestNetworkNamespace(func() {
+		AfterEach(func() {
 			By("Cleanup the specific resource instance Link")
 			resource := &bridgeoperatorv1alpha1.Link{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
@@ -66,9 +66,9 @@ var _ = Describe("Link Controller", func() {
 
 			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).ToNot(Succeed(), "Resource should be deleted after reconciliation")
-		}))
+		})
 
-		It("should successfully reconcile the resource", withTestNetworkNamespace(func() {
+		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 
 			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
@@ -80,7 +80,7 @@ var _ = Describe("Link Controller", func() {
 			Expect(resource.Spec.LinkName).To(Equal("test-vxlan0"), "The LinkName should match the expected value")
 			Expect(meta.IsStatusConditionTrue(resource.Status.Conditions, "Ready")).To(BeTrue(), "The resource should be ready: %#v", resource)
 			Expect(resource.Finalizers).To(ContainElement(linkFinalizerName), "The resource should have the finalizer")
-		}))
+		})
 	})
 
 	Context("When reconciling resources with nodes", func() {
@@ -178,7 +178,7 @@ var _ = Describe("Link Controller", func() {
 			}
 		}
 
-		BeforeEach(withTestNetworkNamespace(func() {
+		BeforeEach(func() {
 			By("creating the custom resources for the Kind Link")
 			for _, link := range links {
 				Expect(k8sClient.Create(ctx, link.resource.DeepCopy())).To(Succeed(), "Failed to create resource %s", link.resource.Name)
@@ -188,9 +188,9 @@ var _ = Describe("Link Controller", func() {
 			for _, node := range nodes {
 				Expect(k8sClient.Create(ctx, node.DeepCopy())).To(Succeed(), "Failed to create node %s", node.Name)
 			}
-		}))
+		})
 
-		AfterEach(withTestNetworkNamespace(func() {
+		AfterEach(func() {
 			reconciler := NewLinkReconciler(k8sCluster)
 
 			By("Cleanup the nodes")
@@ -229,9 +229,9 @@ var _ = Describe("Link Controller", func() {
 				Expect(reconciler.Reconcile(ctx, link.request)).To(Equal(reconcile.Result{}))
 				Expect(k8sClient.Get(ctx, link.typeNamespacedName, link.resource)).ToNot(Succeed(), "Resource should be deleted after reconciliation")
 			}
-		}))
+		})
 
-		It("should successfully reconcile the resources with nodes", withTestNetworkNamespace(func() {
+		It("should successfully reconcile the resources with nodes", func() {
 			By("Reconciling the created resources")
 
 			for name, link := range links {
@@ -256,9 +256,9 @@ var _ = Describe("Link Controller", func() {
 					Expect(nodeLinks.Spec.MatchingLinks).ToNot(ContainElement(resource.Name), "The MatchingLinks should not contain the resource %s for node %s", resource.Name, node.Name)
 				}
 			}
-		}))
+		})
 
-		It("should successfully handle node deletion", withTestNetworkNamespace(func() {
+		It("should successfully handle node deletion", func() {
 			By("Reconciling the created resources")
 			for name, link := range links {
 				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, link.request)).To(Equal(reconcile.Result{}), "Failed to reconcile resource %s", name)
@@ -293,6 +293,6 @@ var _ = Describe("Link Controller", func() {
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeLinks)).To(Succeed(), "Failed to get node links for node %s after deletion", nodeToDelete.Name)
 				Expect(nodeLinks.Spec.MatchingLinks).ToNot(ContainElement(resource.Name), "The MatchingLinks should not contain the resource %s for deleted node %s", resource.Name, nodeToDelete.Name)
 			}
-		}))
+		})
 	})
 })

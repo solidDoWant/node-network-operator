@@ -33,7 +33,7 @@ var _ = Describe("Bridge Controller", func() {
 		}
 		bridge := &bridgeoperatorv1alpha1.Bridge{}
 
-		BeforeEach(withTestNetworkNamespace(func() {
+		BeforeEach(func() {
 			By("creating the custom resource for the Kind Bridge")
 			err := k8sClient.Get(ctx, typeNamespacedName, bridge)
 			if err != nil && apierrors.IsNotFound(err) {
@@ -49,9 +49,9 @@ var _ = Describe("Bridge Controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
-		}))
+		})
 
-		AfterEach(withTestNetworkNamespace(func() {
+		AfterEach(func() {
 			By("Cleanup the specific resource instance Bridge")
 			resource := &bridgeoperatorv1alpha1.Bridge{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
@@ -59,8 +59,8 @@ var _ = Describe("Bridge Controller", func() {
 
 			Expect(NewBridgeReconciler(k8sCluster).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).ToNot(Succeed(), "Resource should be deleted after reconciliation")
-		}))
-		It("should successfully reconcile the resource", withTestNetworkNamespace(func() {
+		})
+		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 
 			Expect(NewBridgeReconciler(k8sCluster).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
@@ -71,8 +71,8 @@ var _ = Describe("Bridge Controller", func() {
 
 			Expect(resource.Spec.InterfaceName).To(Equal("test-bridge0"), "The InterfaceName should match the expected value")
 			Expect(meta.IsStatusConditionTrue(resource.Status.Conditions, "Ready")).To(BeTrue(), "The resource should be ready: %#v", resource)
-		}))
-		It("should reject changes to immutable fields", withTestNetworkNamespace(func() {
+		})
+		It("should reject changes to immutable fields", func() {
 			By("Attempting to change an immutable field")
 
 			Expect(NewBridgeReconciler(k8sCluster).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
@@ -86,7 +86,7 @@ var _ = Describe("Bridge Controller", func() {
 			// Verify the original value remains unchanged
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			Expect(resource.Spec.InterfaceName).To(Equal("test-bridge0"), "The InterfaceName should remain unchanged")
-		}))
+		})
 	})
 
 	Context("When reconciling resources with nodes", func() {
@@ -170,7 +170,7 @@ var _ = Describe("Bridge Controller", func() {
 			}
 		}
 
-		BeforeEach(withTestNetworkNamespace(func() {
+		BeforeEach(func() {
 			By("creating the custom resources for the Kind Bridge")
 			for _, bridge := range bridges {
 				Expect(k8sClient.Create(ctx, bridge.resource.DeepCopy())).To(Succeed(), "Failed to create resource %s", bridge.resource.Name)
@@ -180,9 +180,9 @@ var _ = Describe("Bridge Controller", func() {
 			for _, node := range nodes {
 				Expect(k8sClient.Create(ctx, node.DeepCopy())).To(Succeed(), "Failed to create node %s", node.Name)
 			}
-		}))
+		})
 
-		AfterEach(withTestNetworkNamespace(func() {
+		AfterEach(func() {
 			reconciler := NewBridgeReconciler(k8sCluster)
 
 			By("Cleanup the nodes")
@@ -221,9 +221,9 @@ var _ = Describe("Bridge Controller", func() {
 				Expect(reconciler.Reconcile(ctx, bridge.request)).To(Equal(reconcile.Result{}))
 				Expect(k8sClient.Get(ctx, bridge.typeNamespacedName, bridge.resource)).ToNot(Succeed(), "Resource should be deleted after reconciliation")
 			}
-		}))
+		})
 
-		It("should successfully reconcile the resources with nodes", withTestNetworkNamespace(func() {
+		It("should successfully reconcile the resources with nodes", func() {
 			By("Reconciling the created resources")
 
 			for name, bridge := range bridges {
@@ -248,9 +248,9 @@ var _ = Describe("Bridge Controller", func() {
 					Expect(nodeBridges.Spec.MatchingBridges).ToNot(ContainElement(resource.Name), "The MatchedBridges should not contain the resource %s for node %s", resource.Name, node.Name)
 				}
 			}
-		}))
+		})
 
-		It("should successfully handle node deletion", withTestNetworkNamespace(func() {
+		It("should successfully handle node deletion", func() {
 			By("Reconciling the created resources")
 			for name, bridge := range bridges {
 				Expect(NewBridgeReconciler(k8sCluster).Reconcile(ctx, bridge.request)).To(Equal(reconcile.Result{}), "Failed to reconcile resource %s", name)
@@ -283,6 +283,6 @@ var _ = Describe("Bridge Controller", func() {
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeBridges)).To(Succeed(), "Failed to get node bridges for node %s after deletion", nodeToDelete.Name)
 				Expect(nodeBridges.Spec.MatchingBridges).ToNot(ContainElement(resource.Name), "The MatchedBridges should not contain the resource %s for deleted node %s", resource.Name, nodeToDelete.Name)
 			}
-		}))
+		})
 	})
 })

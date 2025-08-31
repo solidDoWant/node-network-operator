@@ -12,7 +12,7 @@ vet:
 	go vet ./...
 
 .PHONY: build
-build: fmt vet $(LOCALBIN)/ginkgo-netns-check
+build: fmt vet
 
 .PHONY: clean
 clean:
@@ -29,9 +29,6 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
-
-$(LOCALBIN)/ginkgo-netns-check:
-	go build -o "$(LOCALBIN)/ginkgo-netns-check" ./cmd/ginkgo-netns-check
 
 # Dev tooling
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint

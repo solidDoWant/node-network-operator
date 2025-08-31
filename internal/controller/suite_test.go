@@ -51,11 +51,10 @@ var (
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
-
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "Controller Suite", AroundNode(withTestNetworkNamespace))
 }
 
-var _ = BeforeSuite(withTestNetworkNamespace(func() {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	ctx, cancel = context.WithCancel(context.TODO())
@@ -159,9 +158,9 @@ var _ = BeforeSuite(withTestNetworkNamespace(func() {
 
 	Expect(clientcmd.WriteToFile(*clientCmdConfig, filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Succeed(),
 		"Failed to write kubeconfig to %s", filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))
-}))
+})
 
-var _ = AfterSuite(withTestNetworkNamespace(func() {
+var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	if cancel != nil {
 		cancel()
@@ -171,7 +170,7 @@ var _ = AfterSuite(withTestNetworkNamespace(func() {
 
 	Expect(os.Remove(filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Or(Succeed(), MatchError(os.IsNotExist)),
 		"Failed to remove kubeconfig file %s", filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))
-}))
+})
 
 // getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
 // ENVTEST-based tests depend on specific binaries, usually located in paths set by
@@ -198,35 +197,26 @@ func getFirstFoundEnvTestBinaryDir() string {
 
 // vet: ginko-netns-check
 // withTestNetworkNamespace wraps a function to run in a specific network namespace.
-func withTestNetworkNamespace(f func()) func() {
-	return func() {
-		done := make(chan struct{})
+func withTestNetworkNamespace(ctx context.Context, f func(context.Context)) {
+	defer GinkgoRecover()
+	// Important: namespaces are per "thread", which are basically just Linux processes. The current
+	// execution context must be locked to a thread so that all statements run in the same namespace.
+	// The thread is never unlocked, causing it to be thrown away when the goroutine completes. This
+	// ensures that the caller's network namespace is not changed by the function, even when the
+	// called function errors.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
-		go func() {
-			defer close(done)
-			defer GinkgoRecover()
-			// Important: namespaces are per "thread", which are basically just Linux processes. The current
-			// execution context must be locked to a thread so that all statements run in the same namespace.
-			// The thread is never unlocked, causing it to be thrown away when the goroutine completes. This
-			// ensures that the caller's network namespace is not changed by the function, even when the
-			// called function errors.
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
-
-			// Setup the test network namespace if it doesn't exist
-			if testNetNSHandle == nil || !testNetNSHandle.IsOpen() {
-				threadUnsafeSetupTestNetworkNamespace()
-			}
-
-			// Switch to the test network namespace
-			Expect(netns.Set(*testNetNSHandle)).To(Succeed(), "Failed to set thread's network namespace")
-
-			GinkgoHelper()
-			f()
-		}()
-
-		<-done
+	// Setup the test network namespace if it doesn't exist
+	if testNetNSHandle == nil || !testNetNSHandle.IsOpen() {
+		threadUnsafeSetupTestNetworkNamespace()
 	}
+
+	// Switch to the test network namespace
+	Expect(netns.Set(*testNetNSHandle)).To(Succeed(), "Failed to set thread's network namespace")
+
+	GinkgoHelper()
+	f(ctx)
 }
 
 // threadUnsafeSetupTestNetworkNamespace sets up a test network namespace. It should be executed exclusively
