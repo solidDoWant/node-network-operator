@@ -1,8 +1,27 @@
 # node-network-operator
-// TODO(user): Add simple overview of use/purpose
+Manage node network configuration via Kubernetes resources
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+This operator supports various Kubernetes resources for managing node network configuration. This includes:
+* Network link configuration (netlink links typically managed via `ip link { add | del | set }` with iproute2). Supported link types:
+    * Bridges
+    * VXLAN VTEPs
+
+Planned support:
+* Firewall rules via nftables
+
+Potential future support:
+* IP address management for managed network interfaces
+* Wireguard support
+
+This is _not_ a CNI plugin. It will not provide, for example, pod networking or a load balancer implementation. It _does_ allow for 
+setting up node network resources for CNIs to use. For example, this can be used to build a VXLAN overlay network between all nodes, 
+and then a CNI plugin with bridge support ([such as the bridge CNI plugin](https://www.cni.dev/plugins/current/main/bridge/)).
+
+This can also be used in conjunction with a third-party CNI to build a classical L2/L3 overlay network between specific pods. This was
+built to be an alternative to the [pod-gateway](https://github.com/angelnu/pod-gateway/) project when used with the bridge CNI plugin
+and [multus](https://github.com/k8snetworkplumbingwg/multus-cni). This allows for routing the traffic of specific pods through a
+separate "gateway" pod, without needing to give the pods the `NET_ADMIN` capability.
 
 ## Getting Started
 
