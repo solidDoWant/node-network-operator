@@ -120,9 +120,8 @@ type VXLANSpecs struct {
 	MTU *int32 `json:"mtu,omitempty"`
 }
 
-// TODO rename, this is just to prevent a conflict during dev
-// BridgeSpec2 defines the desired state of the link as a bridge.
-type BridgeSpec2 struct {
+// BridgeSpec defines the desired state of the link as a bridge.
+type BridgeSpec struct {
 	// MTU is the maximum transmission unit for the bridge interface.
 	// This should be at least as large as the largest frame payload that will be sent over the bridge.
 	// If not specified, the default MTU for the node will be used.
@@ -135,7 +134,7 @@ type BridgeSpec2 struct {
 type LinkSpecs struct {
 	// Bridge defines the desired state of the link as a bridge.
 	// +optional
-	Bridge *BridgeSpec2 `json:"bridge,omitempty"`
+	Bridge *BridgeSpec `json:"bridge,omitempty"`
 
 	// VXLAN defines the desired state of the link as a VXLAN.
 	// +optional
