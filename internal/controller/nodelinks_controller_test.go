@@ -43,15 +43,17 @@ var _ = Describe("NodeLinks Controller", func() {
 					Name: nodeName,
 				},
 			}
+			// Clean up any existing node first
+			existingNode := &corev1.Node{}
+			if k8sClient.Get(ctx, typeNamespacedName, existingNode) == nil {
+				k8sClient.Delete(ctx, existingNode)
+			}
 			Expect(k8sClient.Create(ctx, node)).To(Succeed(), "Failed to create node %s", nodeName)
 
 			By("creating a link resource that matches the node")
 			link := &bridgeoperatorv1alpha1.Link{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: linkName,
-				},
-				Status: bridgeoperatorv1alpha1.LinkStatus{
-					MatchedNodes: []string{nodeName},
 				},
 				Spec: bridgeoperatorv1alpha1.LinkSpec{
 					LinkName: interfaceName,
@@ -65,7 +67,21 @@ var _ = Describe("NodeLinks Controller", func() {
 					},
 				},
 			}
+			// Clean up any existing link first
+			existingLink := &bridgeoperatorv1alpha1.Link{}
+			if k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, existingLink) == nil {
+				existingLink.Finalizers = nil
+				k8sClient.Update(ctx, existingLink)
+				k8sClient.Delete(ctx, existingLink)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, existingLink)
+				}).ShouldNot(Succeed())
+			}
 			Expect(k8sClient.Create(ctx, link)).To(Succeed(), "Failed to create link resource")
+
+			By("reconciling the Link resource to establish its status")
+			linkRequest := reconcile.Request{NamespacedName: types.NamespacedName{Name: linkName}}
+			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
 
 			By("creating the custom resource for the Kind NodeLinks")
 			nodeLinks := &bridgeoperatorv1alpha1.NodeLinks{
@@ -75,6 +91,16 @@ var _ = Describe("NodeLinks Controller", func() {
 				Spec: bridgeoperatorv1alpha1.NodeLinksSpec{
 					MatchingLinks: []string{link.Name},
 				},
+			}
+			// Clean up any existing NodeLinks first
+			existingNodeLinks := &bridgeoperatorv1alpha1.NodeLinks{}
+			if k8sClient.Get(ctx, typeNamespacedName, existingNodeLinks) == nil {
+				existingNodeLinks.Finalizers = nil
+				k8sClient.Update(ctx, existingNodeLinks)
+				k8sClient.Delete(ctx, existingNodeLinks)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, existingNodeLinks)
+				}).ShouldNot(Succeed())
 			}
 			Expect(k8sClient.Create(ctx, nodeLinks)).To(Succeed(), "Failed to create NodeLinks resource %s", nodeName)
 		}))
@@ -88,7 +114,9 @@ var _ = Describe("NodeLinks Controller", func() {
 
 				By("Reconcile the NodeLinks resource to ensure cleanup occurs")
 				Expect(NewNodeLinksReconciler(k8sCluster, nodeName).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
-				Eventually(k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)).ShouldNot(Succeed(), "NodeLinks resource should be deleted after reconciliation")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)
+				}).ShouldNot(Succeed(), "NodeLinks resource should be deleted after reconciliation")
 			}
 
 			// Only check for netlink deletion if the resource was found and had the interface
@@ -101,16 +129,23 @@ var _ = Describe("NodeLinks Controller", func() {
 
 			By("Cleanup the specific node instance")
 			var node corev1.Node
-			Expect(k8sClient.Get(ctx, typeNamespacedName, &node)).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &node)).To(Succeed())
+			if err := k8sClient.Get(ctx, typeNamespacedName, &node); err == nil {
+				Expect(k8sClient.Delete(ctx, &node)).To(Succeed())
+			}
 
 			By("Cleanup the link resource")
 			var link bridgeoperatorv1alpha1.Link
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, &link)).To(Succeed())
-			link.Finalizers = nil // Remove finalizers to avoid blocking deletion
-			Expect(k8sClient.Update(ctx, &link)).To(Succeed(), "Failed to remove finalizers from link resource %s", linkName)
-			Expect(k8sClient.Delete(ctx, &link)).To(Succeed(), "Failed to delete link resource %s", linkName)
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, &link)).ToNot(Succeed(), "Link resource should be deleted after reconciliation")
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, &link); err == nil {
+				Expect(k8sClient.Delete(ctx, &link)).To(Succeed(), "Failed to delete link resource %s", linkName)
+
+				By("Reconciling Link deletion")
+				linkRequest := reconcile.Request{NamespacedName: types.NamespacedName{Name: linkName}}
+				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
+
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, &link)
+				}).ShouldNot(Succeed(), "Link resource should be deleted after reconciliation")
+			}
 		}))
 
 		It("should handle reconciliation and error cases appropriately", withTestNetworkNamespace(func() {

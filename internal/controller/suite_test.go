@@ -169,7 +169,7 @@ var _ = AfterSuite(withTestNetworkNamespace(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect(os.Remove(filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Or(Succeed(), MatchError(os.ErrNotExist, "IsNotExist")),
+	Expect(os.Remove(filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Or(Succeed(), MatchError(os.IsNotExist)),
 		"Failed to remove kubeconfig file %s", filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))
 }))
 
