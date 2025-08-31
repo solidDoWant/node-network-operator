@@ -268,57 +268,6 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		It("can deploy a sample Bridge resource", func() {
-			By("creating a sample Bridge resource")
-			sampleBridge := filepath.Join("config", "samples", "bridgeoperator_v1alpha1_bridge.yaml")
-			_, err := utils.Run(exec.Command("kubectl", "apply", "-f", sampleBridge))
-			Expect(err).NotTo(HaveOccurred(), "Failed to apply sample Bridge resource")
-
-			defer func() {
-				By("deleting the sample Bridge resource")
-				_, err := utils.Run(exec.Command("kubectl", "delete", "-f", sampleBridge))
-				Expect(err).NotTo(HaveOccurred(), "Failed to delete sample Bridge resource")
-
-				// Wait for the resources to be deleted
-				Eventually(func(g Gomega) {
-					// Bridge resource
-					_, err := utils.Run(exec.Command("kubectl", "get", "bridge", "bridge-sample"))
-					g.Expect(err).To(HaveOccurred(), "Sample Bridge resource should be deleted")
-
-					// NodeBridges resource
-					// This will error when there are no items
-					_, err = utils.Run(exec.Command("kubectl", "get", "nodebridges", "-o", "jsonpath={.items[0]}"))
-					g.Expect(err).To(HaveOccurred(), "NodeBridges resource should be deleted")
-				}).Should(Succeed())
-			}()
-
-			By("validating that the Bridge resource is created")
-			verifyBridgeCreated := func(g Gomega) {
-				isReady, err := utils.Run(exec.Command("kubectl", "get", "bridge", "bridge-sample", "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
-				g.Expect(err).NotTo(HaveOccurred(), "Failed to get Bridge resource")
-				g.Expect(isReady).To(Equal("True"), "NodeBridge resource should be ready")
-			}
-			Eventually(verifyBridgeCreated).Should(Succeed())
-
-			By("validating that the NodeBridges resource succeeds")
-			nodeCmd, err := utils.Run(exec.Command("kubectl", "get", "nodes", "-o", "name"))
-			Expect(err).NotTo(HaveOccurred(), "Failed to get nodes")
-			nodes := utils.GetNonEmptyLines(nodeCmd)
-
-			for _, node := range nodes {
-				node := strings.TrimLeft(node, "node/")
-				verifyNodeBridgeCreated := func(g Gomega) {
-					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodebridges", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
-					g.Expect(err).NotTo(HaveOccurred(), "Failed to get NodeBridges resource")
-					g.Expect(isReady).To(Equal("True"), "NodeBridge resource should be ready")
-
-					_, err = utils.Run(exec.Command("docker", "container", "exec", node, "ip", "link", "show", "sampleBridge0"))
-					g.Expect(err).NotTo(HaveOccurred(), "Failed to verify bridge on node")
-				}
-				Eventually(verifyNodeBridgeCreated).Should(Succeed())
-			}
-		})
-
 		It("can deploy a sample Link resource", func() {
 			By("creating a sample Link resource")
 			sampleLink := filepath.Join("config", "samples", "bridgeoperator_v1alpha1_link.yaml")

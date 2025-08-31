@@ -5,46 +5,27 @@
 cliVersion: 4.6.0
 domain: soliddowant.dev
 layout:
-- go.kubebuilder.io/v4
+  - go.kubebuilder.io/v4
 projectName: bridge-operator
 repo: github.com/solidDoWant/bridge-operator
 resources:
-- api:
-    crdVersion: v1
-  controller: true
-  domain: soliddowant.dev
-  group: bridgeoperator
-  kind: Bridge
-  path: github.com/solidDoWant/bridge-operator/api/v1alpha1
-  version: v1alpha1
-  webhooks:
-    validation: true
-    webhookVersion: v1
-- api:
-    crdVersion: v1
-  controller: true
-  domain: soliddowant.dev
-  group: bridgeoperator
-  kind: NodeBridges
-  path: github.com/solidDoWant/bridge-operator/api/v1alpha1
-  version: v1alpha1
-- api:
-    crdVersion: v1
-  controller: true
-  domain: soliddowant.dev
-  group: bridgeoperator
-  kind: Link
-  path: github.com/solidDoWant/bridge-operator/api/v1alpha1
-  version: v1alpha1
-  webhooks:
-    validation: true
-    webhookVersion: v1
-- api:
-    crdVersion: v1
-  controller: true
-  domain: soliddowant.dev
-  group: bridgeoperator
-  kind: NodeLinks
-  path: github.com/solidDoWant/bridge-operator/api/v1alpha1
-  version: v1alpha1
+  - api:
+      crdVersion: v1
+    controller: true
+    domain: soliddowant.dev
+    group: bridgeoperator
+    kind: Link
+    path: github.com/solidDoWant/bridge-operator/api/v1alpha1
+    version: v1alpha1
+    webhooks:
+      validation: true
+      webhookVersion: v1
+  - api:
+      crdVersion: v1
+    controller: true
+    domain: soliddowant.dev
+    group: bridgeoperator
+    kind: NodeLinks
+    path: github.com/solidDoWant/bridge-operator/api/v1alpha1
+    version: v1alpha1
 version: "3"

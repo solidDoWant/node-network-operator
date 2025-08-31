@@ -238,7 +238,7 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 			return linkName != link.Name
 		})
 
-		// Patch or delete the NodeBridges resource, depending on whether it still has any matching links
+		// Patch or delete the NodeLinks resource, depending on whether it still has any matching links
 		var err error
 		if len(nodeLinks.Spec.MatchingLinks) == 0 {
 			logf.FromContext(ctx).Info("deleting NodeLinks resource", "node", nodeLinksName)
@@ -269,7 +269,7 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 func (r *LinkReconciler) registerWithMatchedNodeLinks(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link, matchedNodes []corev1.Node) error {
 	// Doing this first ensures that the link status always contains at least the nodes that match the link's node selector
 	// even if one or more NodeLinks resources fail to be created or updated.
-	// This is important because the bridge status is used to track which NodeBridges resources may need to be cleaned up upon deletion.
+	// This is important because the bridge status is used to track which NodeLinks resources may need to be cleaned up upon deletion.
 	link.Status.MatchedNodes = pie.Map(matchedNodes, func(node corev1.Node) string {
 		return node.Name
 	})
@@ -294,7 +294,7 @@ func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, clusterState
 
 	_, err := controllerutil.CreateOrPatch(ctx, r.Client, &nodeLinks, func() error {
 		if !nodeLinks.DeletionTimestamp.IsZero() {
-			// Don't do anything if the NodeBridges resource is being deleted
+			// Don't do anything if the NodeLinks resource is being deleted
 			return nil
 		}
 
@@ -310,7 +310,7 @@ func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, clusterState
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to create or patch NodeBridges resource for node %s: %w", node.Name, err)
+		return fmt.Errorf("failed to create or patch NodeLinks resource for node %s: %w", node.Name, err)
 	}
 
 	return nil
@@ -380,7 +380,7 @@ func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, li
 		return fmt.Errorf("failed to patch %T status: %w", clusterStateLink, err)
 	}
 
-	// Update the oldNodeBridges to reflect the new object state
+	// Update the clusterStateLink to reflect the new object state
 	*clusterStateLink = *link.DeepCopy()
 
 	log.V(1).Info(fmt.Sprintf("%T status updated", clusterStateLink))
@@ -429,7 +429,7 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		).
-		// Watch NodeBridges pending deletion, and reconcile matching bridges so that their status fields are updated
+		// Watch NodeLinks pending deletion, and reconcile matching bridges so that their status fields are updated
 		Watches(
 			&bridgeoperatorv1alpha1.NodeLinks{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
@@ -447,7 +447,7 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}),
 			builder.WithPredicates(
-				// Only trigger on events where the NodeBridges resource is being deleted.
+				// Only trigger on events where the NodeLinks resource is being deleted.
 				predicate.Funcs{
 					CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
 						return false

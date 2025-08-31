@@ -22,22 +22,6 @@ rules:
 - apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
-  - bridges
-  verbs:
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - bridgeoperator.soliddowant.dev
-  resources:
-  - bridges/finalizers
-  - bridges/status
-  verbs:
-  - patch
-- apiGroups:
-  - bridgeoperator.soliddowant.dev
-  resources:
   - links
   verbs:
   - create
@@ -57,7 +41,6 @@ rules:
   - bridgeoperator.soliddowant.dev
   resources:
   - links/status
-  - nodebridges/status
   - nodelinks/status
   verbs:
   - get
@@ -66,7 +49,6 @@ rules:
 - apiGroups:
   - bridgeoperator.soliddowant.dev
   resources:
-  - nodebridges
   - nodelinks
   verbs:
   - create

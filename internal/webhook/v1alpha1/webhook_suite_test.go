@@ -93,9 +93,6 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = SetupBridgeWebhookWithManager(mgr)
-	Expect(err).NotTo(HaveOccurred())
-
 	err = SetupLinkWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
