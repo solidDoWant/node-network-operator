@@ -1,3 +1,4 @@
+---
 apiVersion: bridgeoperator.soliddowant.dev/v1alpha1
 kind: Link
 metadata:
@@ -6,4 +7,6 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: link-sample
 spec:
-  # TODO(user): Add fields here
+  interfaceName: sampleBridge1
+  bridge:
+    mtu: 1234
