@@ -192,9 +192,6 @@ KUSTOMIZE_VERSION ?= v5.6.0
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
-#ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
-# TODO temp - see go.mod TODO for k8s.io/api
-ENVTEST_K8S_VERSION = 1.33
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.1.0
 
@@ -206,15 +203,7 @@ $(KUSTOMIZE): $(LOCALBIN)
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-# 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
-# This must be built locally until https://github.com/kubernetes-sigs/controller-tools/commit/7c982e071528c7c61510d0a297cd901f602aeaea
-# is released
-	$(eval SRCDIR := $(shell mktemp --directory /tmp/controller-tools-XXXXXX))
-	@echo "Building controller-gen from source..."
-	@git clone --depth 1 --revision b624019bbe8d5605fdb89b99d88882910a65ed14 https://github.com/kubernetes-sigs/controller-tools.git "$(SRCDIR)"
-	@cd "$(SRCDIR)" && GOOS="$(shell go env GOOS)" GOARCH="$(shell go env GOARCH)" RELEASE_BINARY=controller-gen make release-binary
-	@mv "$(SRCDIR)/out/controller-gen" "$(LOCALBIN)/controller-gen"
-	@rm -rf $(SRCDIR)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: setup-envtest
 setup-envtest: envtest ## Download the binaries required for ENVTEST in the local bin directory.
