@@ -431,17 +431,17 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		// Watch NodeBridges pending deletion, and reconcile matching bridges so that their status fields are updated
 		Watches(
-			&bridgeoperatorv1alpha1.NodeBridges{},
+			&bridgeoperatorv1alpha1.NodeLinks{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
-				nodeBridges, ok := o.(*bridgeoperatorv1alpha1.NodeBridges)
-				if !ok || nodeBridges == nil {
+				nodeLinks, ok := o.(*bridgeoperatorv1alpha1.NodeLinks)
+				if !ok || nodeLinks == nil {
 					return nil
 				}
 
-				return pie.Map(nodeBridges.Spec.MatchingBridges, func(bridgeName string) reconcile.Request {
+				return pie.Map(nodeLinks.Spec.MatchingLinks, func(linkName string) reconcile.Request {
 					return reconcile.Request{
 						NamespacedName: client.ObjectKey{
-							Name: bridgeName,
+							Name: linkName,
 						},
 					}
 				})
