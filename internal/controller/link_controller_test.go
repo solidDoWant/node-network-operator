@@ -275,8 +275,10 @@ var _ = Describe("Link Controller", func() {
 
 				By(fmt.Sprintf("Verifying the resource %s updates after node deletion", name))
 				var resource bridgeoperatorv1alpha1.Link
-				Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s after node deletion", name)
-				Expect(resource.Status.MatchedNodes).ToNot(ContainElement(nodeToDelete.Name), "The MatchedNodes should not contain the deleted node %s for resource %s", nodeToDelete.Name, name)
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s after node deletion", name)
+					g.Expect(resource.Status.MatchedNodes).ToNot(ContainElement(nodeToDelete.Name), "The MatchedNodes should not contain the deleted node %s for resource %s", nodeToDelete.Name, name)
+				}).Should(Succeed())
 
 				By(fmt.Sprintf("Verifying the NodeLinks for resource %s after node deletion", name))
 				var nodeLinks bridgeoperatorv1alpha1.NodeLinks
@@ -284,7 +286,7 @@ var _ = Describe("Link Controller", func() {
 				if len(resource.Status.MatchedNodes) == 0 {
 					// If the resource has no matched nodes, it should not have a NodeLinks resource
 					// Normally the resource would exist pending deletion, but it is not reconciled at any point so the finalizer is never added.
-					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeLinks)).ToNot(Succeed(), "NodeLinks should not exist for node %s after deletion", nodeToDelete.Name)
+					Eventually(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeLinks)).ShouldNot(Succeed(), "NodeLinks should not exist for node %s after deletion", nodeToDelete.Name)
 					continue
 				}
 
