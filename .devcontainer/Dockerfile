@@ -13,4 +13,4 @@ RUN apt update && apt install --no-install-recommends -y inetutils-ping tcpdump 
 # Autocomplete
 RUN \
     kubectl completion bash | sudo tee /etc/bash_completion.d/kubectl.bash > /dev/null && \
-    helm completion bash | sudo tee /etc/bash_completion.d/helm.bash > /dev/null && \
+    helm completion bash | sudo tee /etc/bash_completion.d/helm.bash > /dev/null

@@ -3,6 +3,8 @@ THIS_MAKEFILE_DIRECTORY = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ROOT_MAKEFILE_DIRECTORY ?= $(abspath $(THIS_MAKEFILE_DIRECTORY)..)
 LOCALBIN = $(shell $(MAKE) -C $(ROOT_MAKEFILE_DIRECTORY) --no-print-directory print-localbin)
 
+include schema.mk
+
 .PHONY: fmt
 fmt:
 	go fmt ./...
