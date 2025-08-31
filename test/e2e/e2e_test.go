@@ -319,14 +319,56 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 		})
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("can deploy a sample Link resource", func() {
+			By("creating a sample Link resource")
+			sampleLink := filepath.Join("config", "samples", "bridgeoperator_v1alpha1_link.yaml")
+			_, err := utils.Run(exec.Command("kubectl", "apply", "-f", sampleLink))
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply sample Link resource")
+
+			defer func() {
+				By("deleting the sample Link resource")
+				_, err := utils.Run(exec.Command("kubectl", "delete", "-f", sampleLink))
+				Expect(err).NotTo(HaveOccurred(), "Failed to delete sample Link resource")
+
+				// Wait for the resources to be deleted
+				Eventually(func(g Gomega) {
+					// Link resource
+					_, err := utils.Run(exec.Command("kubectl", "get", "link", "link-sample"))
+					g.Expect(err).To(HaveOccurred(), "Sample Link resource should be deleted")
+
+					// NodeLinks resource
+					// This will error when there are no items
+					_, err = utils.Run(exec.Command("kubectl", "get", "nodelinks", "-o", "jsonpath={.items[0]}"))
+					g.Expect(err).To(HaveOccurred(), "NodeLinks resource should be deleted")
+				}).Should(Succeed())
+			}()
+
+			By("validating that the Link resource is created")
+			verifyLinkCreated := func(g Gomega) {
+				isReady, err := utils.Run(exec.Command("kubectl", "get", "link", "link-sample", "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to get Link resource")
+				g.Expect(isReady).To(Equal("True"), "Link resource should be ready")
+			}
+			Eventually(verifyLinkCreated).Should(Succeed())
+
+			By("validating that the NodeLinks resource succeeds")
+			nodeCmd, err := utils.Run(exec.Command("kubectl", "get", "nodes", "-o", "name"))
+			Expect(err).NotTo(HaveOccurred(), "Failed to get nodes")
+			nodes := utils.GetNonEmptyLines(nodeCmd)
+
+			for _, node := range nodes {
+				node := strings.TrimLeft(node, "node/")
+				verifyNodeLinkCreated := func(g Gomega) {
+					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
+					g.Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
+					g.Expect(isReady).To(Equal("True"), "NodeLinks resource should be ready")
+
+					_, err = utils.Run(exec.Command("docker", "container", "exec", node, "ip", "link", "show", "sampleBridge1"))
+					g.Expect(err).NotTo(HaveOccurred(), "Failed to verify link on node")
+				}
+				Eventually(verifyNodeLinkCreated).Should(Succeed())
+			}
+		})
 	})
 })
 

@@ -87,7 +87,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	logf.IntoContext(ctx, log)
 
 	if !controllerutil.AddFinalizer(nodeLinks, nodeLinksFinalizerName) {
-		log.V(1).Info("adding f inalizer to NodeLinks resource", "finalizer", nodeLinksFinalizerName)
+		log.V(1).Info("adding finalizer to NodeLinks resource", "finalizer", nodeLinksFinalizerName)
 		if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
 			condition := &metav1.Condition{
 				Type:    "Ready",
@@ -557,7 +557,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 	if upsertNeeded {
 		// Bring down any links in the dependent tree with SetDownOnDependencyChainUpdate=true
 		if ok {
-			if err := r.bringDownDependents(ctx, nodeLinks, linkResource.Spec.LinkName, linkResources, linkGraph); err != nil {
+			if err := r.bringDownDependents(ctx, nodeLinks, linkResourceName, linkResources, linkGraph); err != nil {
 				readyCondition := metav1.Condition{
 					Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
 					Status:  metav1.ConditionFalse,

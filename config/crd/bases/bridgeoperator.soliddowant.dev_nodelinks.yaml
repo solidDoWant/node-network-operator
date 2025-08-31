@@ -39,7 +39,7 @@ spec:
           spec:
             description: spec defines the desired state of NodeLinks
             properties:
-              matchinglinks:
+              matchingLinks:
                 description: MatchingLinks is a list of bridge names that match the
                   node's configuration.
                 items:

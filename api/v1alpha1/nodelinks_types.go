@@ -9,7 +9,7 @@ type NodeLinksSpec struct {
 	// MatchingLinks is a list of bridge names that match the node's configuration.
 	// +listType=set
 	// +optional
-	MatchingLinks []string `json:"matchinglinks,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	MatchingLinks []string `json:"matchingLinks,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 const (
