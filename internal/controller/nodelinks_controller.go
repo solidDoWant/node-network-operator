@@ -12,10 +12,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -942,5 +944,9 @@ func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 		).
 		Named("nodelinks").
+		WithOptions(controller.TypedOptions[reconcile.Request]{
+			// Ignore leader election. This controller should run once per node.
+			NeedLeaderElection: ptr.To(false),
+		}).
 		Complete(r)
 }
