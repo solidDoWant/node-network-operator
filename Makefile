@@ -67,7 +67,7 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest $(GINKGO) ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GINKGO) run -race -cover -vet="" $$(go list ./... | grep -v /e2e | sed "s~$$(go list -m)/~~")
 
-KIND_CLUSTER ?= bridge-operator-test-e2e
+KIND_CLUSTER ?= node-network-operator-test-e2e
 
 .PHONY: print-kind-cluster-name
 print-kind-cluster-name:
@@ -134,10 +134,10 @@ PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name bridge-operator-builder
-	$(CONTAINER_TOOL) buildx use bridge-operator-builder
+	- $(CONTAINER_TOOL) buildx create --name node-network-operator-builder
+	$(CONTAINER_TOOL) buildx use node-network-operator-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm bridge-operator-builder
+	- $(CONTAINER_TOOL) buildx rm node-network-operator-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer

@@ -5,19 +5,19 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 )
 
 var _ = Describe("Link Webhook", func() {
 	var (
-		obj       *bridgeoperatorv1alpha1.Link
-		oldObj    *bridgeoperatorv1alpha1.Link
+		obj       *nodenetworkoperatorv1alpha1.Link
+		oldObj    *nodenetworkoperatorv1alpha1.Link
 		validator LinkCustomValidator
 	)
 
 	BeforeEach(func() {
-		obj = &bridgeoperatorv1alpha1.Link{}
-		oldObj = &bridgeoperatorv1alpha1.Link{}
+		obj = &nodenetworkoperatorv1alpha1.Link{}
+		oldObj = &nodenetworkoperatorv1alpha1.Link{}
 		validator = LinkCustomValidator{}
 		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")

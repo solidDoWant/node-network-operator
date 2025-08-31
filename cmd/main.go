@@ -21,9 +21,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
-	"github.com/solidDoWant/bridge-operator/internal/controller"
-	webhookv1alpha1 "github.com/solidDoWant/bridge-operator/internal/webhook/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
+	"github.com/solidDoWant/node-network-operator/internal/controller"
+	webhookv1alpha1 "github.com/solidDoWant/node-network-operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -35,7 +35,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(bridgeoperatorv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(nodenetworkoperatorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

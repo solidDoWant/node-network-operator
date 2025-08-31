@@ -6,16 +6,16 @@ cliVersion: 4.6.0
 domain: soliddowant.dev
 layout:
   - go.kubebuilder.io/v4
-projectName: bridge-operator
-repo: github.com/solidDoWant/bridge-operator
+projectName: node-network-operator
+repo: github.com/solidDoWant/node-network-operator
 resources:
   - api:
       crdVersion: v1
     controller: true
     domain: soliddowant.dev
-    group: bridgeoperator
+    group: nodenetworkoperator
     kind: Link
-    path: github.com/solidDoWant/bridge-operator/api/v1alpha1
+    path: github.com/solidDoWant/node-network-operator/api/v1alpha1
     version: v1alpha1
     webhooks:
       validation: true
@@ -24,8 +24,8 @@ resources:
       crdVersion: v1
     controller: true
     domain: soliddowant.dev
-    group: bridgeoperator
+    group: nodenetworkoperator
     kind: NodeLinks
-    path: github.com/solidDoWant/bridge-operator/api/v1alpha1
+    path: github.com/solidDoWant/node-network-operator/api/v1alpha1
     version: v1alpha1
 version: "3"

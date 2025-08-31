@@ -11,7 +11,7 @@ type LinkReference struct {
 
 	// // Group is the API group of the referenced link resource.
 	// // +kubebuilder:validation:Optional
-	// // +kubebuilder:default:bridgeoperator.soliddowant.dev
+	// // +kubebuilder:default:nodenetworkoperator.soliddowant.dev
 	// Group string `json:"group,omitempty"`
 
 	// // Kind is the kind of the referenced link resource.

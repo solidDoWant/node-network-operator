@@ -4,25 +4,25 @@ import (
 	"context"
 	"fmt"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 	"github.com/vishvananda/netlink"
 )
 
 // Manager is an interface for managing a specific network link.
 type Manager interface {
 	// GetDependencies returns the list of link resource names that this link depends on.
-	GetDependencies() []bridgeoperatorv1alpha1.LinkReference
+	GetDependencies() []nodenetworkoperatorv1alpha1.LinkReference
 
 	// IsUpsertNeeded returns true if the link needs to be upserted.
-	IsUpsertNeeded(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) (bool, error)
+	IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) (bool, error)
 
 	// Upsert brings the link to the desired state. This will only be called if IsUpsertNeeded returns true.
-	Upsert(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) error
+	Upsert(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error
 }
 
 // doesLinkRefNeedUpdate checks if the current link reference needs to be updated to match the desired configuration.
 // Returns true if an update is needed, false otherwise.
-func doesLinkRefNeedUpdate(linkRef *bridgeoperatorv1alpha1.LinkReference, currentIndex int, linkResources map[string]*bridgeoperatorv1alpha1.Link) (bool, error) {
+func doesLinkRefNeedUpdate(linkRef *nodenetworkoperatorv1alpha1.LinkReference, currentIndex int, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) (bool, error) {
 	if linkRef != nil {
 		if currentIndex == 0 {
 			// Link does not reference another link, but one is specified
@@ -112,7 +112,7 @@ func basicUpsertWithCheck(desiredLink netlink.Link, shouldForceReplace func(exis
 
 // getDesiredReferencedLinkIndex returns the index of the link referenced by linkRef in the desired configuration.
 // If linkRef is nil, returns 0. Most (all?) netlink functions interpret a link index of 0 as "no link" or "unset reference".
-func getDesiredReferencedLinkIndex(linkRef *bridgeoperatorv1alpha1.LinkReference, linkResources map[string]*bridgeoperatorv1alpha1.Link) (int, error) {
+func getDesiredReferencedLinkIndex(linkRef *nodenetworkoperatorv1alpha1.LinkReference, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) (int, error) {
 	if linkRef == nil {
 		return 0, nil
 	}

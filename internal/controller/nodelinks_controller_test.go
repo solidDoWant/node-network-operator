@@ -14,7 +14,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 )
 
 var _ = Describe("NodeLinks Controller", func() {
@@ -51,14 +51,14 @@ var _ = Describe("NodeLinks Controller", func() {
 			Expect(k8sClient.Create(ctx, node)).To(Succeed(), "Failed to create node %s", nodeName)
 
 			By("creating a link resource that matches the node")
-			link := &bridgeoperatorv1alpha1.Link{
+			link := &nodenetworkoperatorv1alpha1.Link{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: linkName,
 				},
-				Spec: bridgeoperatorv1alpha1.LinkSpec{
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
 					LinkName: interfaceName,
-					LinkSpecs: bridgeoperatorv1alpha1.LinkSpecs{
-						VXLAN: &bridgeoperatorv1alpha1.VXLANSpecs{
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+						VXLAN: &nodenetworkoperatorv1alpha1.VXLANSpecs{
 							VNID:            vnid,
 							RemoteIPAddress: remoteIP,
 							RemotePort:      remotePort,
@@ -68,7 +68,7 @@ var _ = Describe("NodeLinks Controller", func() {
 				},
 			}
 			// Clean up any existing link first
-			existingLink := &bridgeoperatorv1alpha1.Link{}
+			existingLink := &nodenetworkoperatorv1alpha1.Link{}
 			if k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, existingLink) == nil {
 				existingLink.Finalizers = nil
 				k8sClient.Update(ctx, existingLink)
@@ -84,16 +84,16 @@ var _ = Describe("NodeLinks Controller", func() {
 			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
 
 			By("creating the custom resource for the Kind NodeLinks")
-			nodeLinks := &bridgeoperatorv1alpha1.NodeLinks{
+			nodeLinks := &nodenetworkoperatorv1alpha1.NodeLinks{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: nodeName,
 				},
-				Spec: bridgeoperatorv1alpha1.NodeLinksSpec{
+				Spec: nodenetworkoperatorv1alpha1.NodeLinksSpec{
 					MatchingLinks: []string{link.Name},
 				},
 			}
 			// Clean up any existing NodeLinks first
-			existingNodeLinks := &bridgeoperatorv1alpha1.NodeLinks{}
+			existingNodeLinks := &nodenetworkoperatorv1alpha1.NodeLinks{}
 			if k8sClient.Get(ctx, typeNamespacedName, existingNodeLinks) == nil {
 				existingNodeLinks.Finalizers = nil
 				k8sClient.Update(ctx, existingNodeLinks)
@@ -107,7 +107,7 @@ var _ = Describe("NodeLinks Controller", func() {
 
 		AfterEach(func() {
 			By("Cleanup the specific resource instance NodeLinks")
-			var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 			err := k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)
 			if err == nil {
 				Expect(k8sClient.Delete(ctx, &nodeLinks)).To(Succeed())
@@ -134,7 +134,7 @@ var _ = Describe("NodeLinks Controller", func() {
 			}
 
 			By("Cleanup the link resource")
-			var link bridgeoperatorv1alpha1.Link
+			var link nodenetworkoperatorv1alpha1.Link
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, &link); err == nil {
 				Expect(k8sClient.Delete(ctx, &link)).To(Succeed(), "Failed to delete link resource %s", linkName)
 
@@ -156,7 +156,7 @@ var _ = Describe("NodeLinks Controller", func() {
 			// The important thing is that it handles errors gracefully and updates status appropriately
 			Expect(result).To(Equal(reconcile.Result{}))
 
-			var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 			Expect(k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)).To(Succeed(), "Failed to get NodeLinks resource %s", nodeName)
 
 			// The finalizer should be added regardless of success/failure
@@ -182,7 +182,7 @@ var _ = Describe("NodeLinks Controller", func() {
 			Expect(result).To(Equal(reconcile.Result{}))
 
 			By("Deleting the NodeLinks resource")
-			var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 			Expect(k8sClient.Get(ctx, typeNamespacedName, &nodeLinks)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, &nodeLinks)).To(Succeed())
 

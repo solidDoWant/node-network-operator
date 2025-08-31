@@ -5,24 +5,24 @@ import (
 	"fmt"
 	"net"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 )
 
 type VXLANManager struct {
-	link *bridgeoperatorv1alpha1.Link
+	link *nodenetworkoperatorv1alpha1.Link
 }
 
-func NewVXLANManager(link *bridgeoperatorv1alpha1.Link) *VXLANManager {
+func NewVXLANManager(link *nodenetworkoperatorv1alpha1.Link) *VXLANManager {
 	return &VXLANManager{
 		link: link,
 	}
 }
 
-func (m *VXLANManager) GetDependencies() []bridgeoperatorv1alpha1.LinkReference {
-	dependencies := make([]bridgeoperatorv1alpha1.LinkReference, 0, 2)
+func (m *VXLANManager) GetDependencies() []nodenetworkoperatorv1alpha1.LinkReference {
+	dependencies := make([]nodenetworkoperatorv1alpha1.LinkReference, 0, 2)
 
 	if m.link.Spec.VXLAN.Master != nil {
 		dependencies = append(dependencies, *m.link.Spec.VXLAN.Master)
@@ -35,7 +35,7 @@ func (m *VXLANManager) GetDependencies() []bridgeoperatorv1alpha1.LinkReference 
 	return dependencies
 }
 
-func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) (bool, error) {
+func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) (bool, error) {
 	link, err := netlink.LinkByName(m.link.Spec.LinkName)
 	if err != nil {
 		if IsLinkNotFoundError(err) {
@@ -96,7 +96,7 @@ func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *bridgeoper
 	return false, nil
 }
 
-func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) error {
+func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	vxlan := &netlink.Vxlan{
 		LinkAttrs: netlink.NewLinkAttrs(),
 		VxlanId:   int(m.link.Spec.VXLAN.VNID),

@@ -1,9 +1,9 @@
 ---
-apiVersion: bridgeoperator.soliddowant.dev/v1alpha1
+apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
 kind: Link
 metadata:
   labels:
-    app.kubernetes.io/name: bridge-operator
+    app.kubernetes.io/name: node-network-operator
     app.kubernetes.io/managed-by: kustomize
   name: link-sample
 spec:

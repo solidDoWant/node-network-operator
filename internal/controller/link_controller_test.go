@@ -16,7 +16,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 )
 
 var _ = Describe("Link Controller", func() {
@@ -31,22 +31,22 @@ var _ = Describe("Link Controller", func() {
 		request := reconcile.Request{
 			NamespacedName: typeNamespacedName,
 		}
-		link := &bridgeoperatorv1alpha1.Link{}
+		link := &nodenetworkoperatorv1alpha1.Link{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Link")
 			err := k8sClient.Get(ctx, typeNamespacedName, link)
 			if err != nil && apierrors.IsNotFound(err) {
-				resource := &bridgeoperatorv1alpha1.Link{
+				resource := &nodenetworkoperatorv1alpha1.Link{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 						Labels:    map[string]string{"app": "link-controller"},
 					},
-					Spec: bridgeoperatorv1alpha1.LinkSpec{
+					Spec: nodenetworkoperatorv1alpha1.LinkSpec{
 						LinkName: "test-vxlan0",
-						LinkSpecs: bridgeoperatorv1alpha1.LinkSpecs{
-							VXLAN: &bridgeoperatorv1alpha1.VXLANSpecs{
+						LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+							VXLAN: &nodenetworkoperatorv1alpha1.VXLANSpecs{
 								VNID:            12345,
 								RemoteIPAddress: "224.0.0.1",
 								RemotePort:      4789,
@@ -60,7 +60,7 @@ var _ = Describe("Link Controller", func() {
 
 		AfterEach(func() {
 			By("Cleanup the specific resource instance Link")
-			resource := &bridgeoperatorv1alpha1.Link{}
+			resource := &nodenetworkoperatorv1alpha1.Link{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
@@ -74,7 +74,7 @@ var _ = Describe("Link Controller", func() {
 			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, request)).To(Equal(reconcile.Result{}))
 
 			By("Verifying the resource is in the expected state")
-			resource := &bridgeoperatorv1alpha1.Link{}
+			resource := &nodenetworkoperatorv1alpha1.Link{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 
 			Expect(resource.Spec.LinkName).To(Equal("test-vxlan0"), "The LinkName should match the expected value")
@@ -106,14 +106,14 @@ var _ = Describe("Link Controller", func() {
 		}
 
 		linkConfigs := []struct {
-			resourceSpec         bridgeoperatorv1alpha1.LinkSpec
+			resourceSpec         nodenetworkoperatorv1alpha1.LinkSpec
 			expectedMatchedNodes []string
 		}{
 			{
-				resourceSpec: bridgeoperatorv1alpha1.LinkSpec{
+				resourceSpec: nodenetworkoperatorv1alpha1.LinkSpec{
 					LinkName: "test-vxlan0",
-					LinkSpecs: bridgeoperatorv1alpha1.LinkSpecs{
-						VXLAN: &bridgeoperatorv1alpha1.VXLANSpecs{
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+						VXLAN: &nodenetworkoperatorv1alpha1.VXLANSpecs{
 							VNID:            12345,
 							RemoteIPAddress: "224.0.0.1",
 							RemotePort:      4789,
@@ -124,7 +124,7 @@ var _ = Describe("Link Controller", func() {
 				expectedMatchedNodes: []string{nodes[0].Name, nodes[1].Name, nodes[2].Name},
 			},
 			{
-				resourceSpec: bridgeoperatorv1alpha1.LinkSpec{
+				resourceSpec: nodenetworkoperatorv1alpha1.LinkSpec{
 					LinkName: "test-vxlan1",
 					NodeSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{"exactLabel": "exactValue"},
@@ -136,8 +136,8 @@ var _ = Describe("Link Controller", func() {
 							},
 						},
 					},
-					LinkSpecs: bridgeoperatorv1alpha1.LinkSpecs{
-						VXLAN: &bridgeoperatorv1alpha1.VXLANSpecs{
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+						VXLAN: &nodenetworkoperatorv1alpha1.VXLANSpecs{
 							VNID:            54321,
 							RemoteIPAddress: "224.0.0.2",
 							RemotePort:      4790,
@@ -150,7 +150,7 @@ var _ = Describe("Link Controller", func() {
 		}
 
 		type link struct {
-			resource             *bridgeoperatorv1alpha1.Link
+			resource             *nodenetworkoperatorv1alpha1.Link
 			typeNamespacedName   types.NamespacedName
 			request              reconcile.Request
 			expectedMatchedNodes []string
@@ -164,7 +164,7 @@ var _ = Describe("Link Controller", func() {
 			}
 
 			links[name] = link{
-				resource: &bridgeoperatorv1alpha1.Link{
+				resource: &nodenetworkoperatorv1alpha1.Link{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: name,
 					},
@@ -205,7 +205,7 @@ var _ = Describe("Link Controller", func() {
 				By(fmt.Sprintf("Cleanup the NodeLinks for node %s", node.Name))
 				// While these are owned by the node, they are not deleted automatically because envtest does not deploy the kube-controller-manager.
 				// See https://github.com/kubernetes-sigs/controller-runtime/issues/3083 for details.
-				var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+				var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeLinks)).To(Succeed(), "Failed to get node links for node %s", node.Name)
 				// This test does not need to verify the finalizer logic of the NodeLinks resource.
 				nodeLinks.Finalizers = nil
@@ -220,7 +220,7 @@ var _ = Describe("Link Controller", func() {
 			}
 
 			By("Cleanup the specific resource instance Link")
-			var clusterLinks bridgeoperatorv1alpha1.LinkList
+			var clusterLinks nodenetworkoperatorv1alpha1.LinkList
 			Expect(k8sClient.List(ctx, &clusterLinks)).To(Succeed(), "Failed to list Link resources")
 			for _, clusterLink := range clusterLinks.Items {
 				Expect(k8sClient.Delete(ctx, &clusterLink)).To(Succeed(), "Failed to delete Link resource %s", clusterLink.Name)
@@ -238,7 +238,7 @@ var _ = Describe("Link Controller", func() {
 				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, link.request)).To(Equal(reconcile.Result{}), "Failed to reconcile resource %s", name)
 
 				By(fmt.Sprintf("Verifying the resource %s is in the expected state", name))
-				var resource bridgeoperatorv1alpha1.Link
+				var resource nodenetworkoperatorv1alpha1.Link
 				Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s", name)
 				Expect(resource.Status.MatchedNodes).To(ConsistOf(link.expectedMatchedNodes), "The MatchedNodes should match the expected nodes for resource %s", name)
 				Expect(resource.Finalizers).To(ContainElement(linkFinalizerName), "The resource should have the finalizer")
@@ -246,7 +246,7 @@ var _ = Describe("Link Controller", func() {
 				// Verify that the nodelinks resources contain the expected links
 				By(fmt.Sprintf("Verifying the NodeLinks for resource %s", name))
 				for _, node := range nodes {
-					var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+					var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeLinks)).To(Succeed(), "Failed to get node links for node %s", node.Name)
 
 					if slices.Contains(link.expectedMatchedNodes, node.Name) {
@@ -274,14 +274,14 @@ var _ = Describe("Link Controller", func() {
 				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, link.request)).To(Equal(reconcile.Result{}), "Failed to reconcile resource %s after node deletion", name)
 
 				By(fmt.Sprintf("Verifying the resource %s updates after node deletion", name))
-				var resource bridgeoperatorv1alpha1.Link
+				var resource nodenetworkoperatorv1alpha1.Link
 				Eventually(func(g Gomega) {
 					g.Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s after node deletion", name)
 					g.Expect(resource.Status.MatchedNodes).ToNot(ContainElement(nodeToDelete.Name), "The MatchedNodes should not contain the deleted node %s for resource %s", nodeToDelete.Name, name)
 				}).Should(Succeed())
 
 				By(fmt.Sprintf("Verifying the NodeLinks for resource %s after node deletion", name))
-				var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+				var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 
 				if len(resource.Status.MatchedNodes) == 0 {
 					// If the resource has no matched nodes, it should not have a NodeLinks resource

@@ -25,15 +25,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/elliotchance/pie/v2"
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 )
 
 var (
-	linkFinalizerName = fmt.Sprintf("link.%s/finalizer", bridgeoperatorv1alpha1.GroupVersion.Group)
+	linkFinalizerName = fmt.Sprintf("link.%s/finalizer", nodenetworkoperatorv1alpha1.GroupVersion.Group)
 )
 
 // type linkTypeReconciler interface {
-// 	func upsertLink(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link) (ctrl.Result, error)
+// 	func upsertLink(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) (ctrl.Result, error)
 
 // }
 
@@ -52,10 +52,10 @@ func NewLinkReconciler(cluster cluster.Cluster) *LinkReconciler {
 	}
 }
 
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=links,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=links/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=links/finalizers,verbs=update
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=links,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=links/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=links/finalizers,verbs=update
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
@@ -69,7 +69,7 @@ func (r *LinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	logf.IntoContext(ctx, log)
 
 	// Fetch the Link instance
-	var link bridgeoperatorv1alpha1.Link
+	var link nodenetworkoperatorv1alpha1.Link
 	if err := r.Get(ctx, req.NamespacedName, &link); err != nil {
 		log.Error(err, "unable to fetch Link")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -87,7 +87,7 @@ func (r *LinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return r.handleUpsert(ctx, clusterStateLink, &link)
 }
 
-func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link) (ctrl.Result, error) {
+func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("action", "upsert")
 	logf.IntoContext(ctx, log)
 
@@ -124,7 +124,7 @@ func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, lin
 	return ctrl.Result{}, r.patchResource(ctx, clusterStateLink, link)
 }
 
-func (r *LinkReconciler) handleDeletion(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link) (ctrl.Result, error) {
+func (r *LinkReconciler) handleDeletion(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("action", "delete")
 	logf.IntoContext(ctx, log)
 
@@ -169,7 +169,7 @@ func (r *LinkReconciler) handleDeletion(ctx context.Context, clusterStateLink, l
 
 // updateNodeLinks updates the NodeLinks desired state based on the Link's node selector. Nodes/NodeLinks that are no longer matching
 // will be updated to remove the Link from their desired state.
-func (r *LinkReconciler) updateNodeLinks(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link) error {
+func (r *LinkReconciler) updateNodeLinks(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) error {
 	nodes, err := r.getMatchingNodes(ctx, link)
 	if err != nil {
 		return fmt.Errorf("failed to get matching node names: %w", err)
@@ -193,7 +193,7 @@ func (r *LinkReconciler) updateNodeLinks(ctx context.Context, clusterStateLink, 
 	return nil
 }
 
-func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link *bridgeoperatorv1alpha1.Link, newNodes []corev1.Node) error {
+func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link *nodenetworkoperatorv1alpha1.Link, newNodes []corev1.Node) error {
 	desiredNodeNames := pie.Map(newNodes, func(node corev1.Node) string {
 		return node.Name
 	})
@@ -201,7 +201,7 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 	_, undesiredNodeLinksNames := pie.Diff(link.Status.MatchedNodes, desiredNodeNames)
 
 	errs := pie.Map(undesiredNodeLinksNames, func(nodeLinksName string) error {
-		var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+		var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 		if err := r.Get(ctx, client.ObjectKey{Name: nodeLinksName}, &nodeLinks); err != nil {
 			if apierrors.IsNotFound(err) {
 				// NodeLinks resource does not exist, nothing to do
@@ -266,7 +266,7 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 }
 
 // registerWithMatchedNodeLinks registers the link with the NodeLinks resources for all provided nodes.
-func (r *LinkReconciler) registerWithMatchedNodeLinks(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link, matchedNodes []corev1.Node) error {
+func (r *LinkReconciler) registerWithMatchedNodeLinks(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link, matchedNodes []corev1.Node) error {
 	// Doing this first ensures that the link status always contains at least the nodes that match the link's node selector
 	// even if one or more NodeLinks resources fail to be created or updated.
 	// This is important because the bridge status is used to track which NodeLinks resources may need to be cleaned up upon deletion.
@@ -285,8 +285,8 @@ func (r *LinkReconciler) registerWithMatchedNodeLinks(ctx context.Context, clust
 }
 
 // registerWithNodeLinks registers the link with the NodeLinks resource for the given node.
-func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link, node corev1.Node) error {
-	nodeLinks := bridgeoperatorv1alpha1.NodeLinks{
+func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link, node corev1.Node) error {
+	nodeLinks := nodenetworkoperatorv1alpha1.NodeLinks{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: node.Name,
 		},
@@ -317,7 +317,7 @@ func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, clusterState
 }
 
 // getmatchingNodes retrieves all nodes that match the Link's node selector.
-func (r *LinkReconciler) getMatchingNodes(ctx context.Context, link *bridgeoperatorv1alpha1.Link) ([]corev1.Node, error) {
+func (r *LinkReconciler) getMatchingNodes(ctx context.Context, link *nodenetworkoperatorv1alpha1.Link) ([]corev1.Node, error) {
 	nodeSelector, err := metav1.LabelSelectorAsSelector(&link.Spec.NodeSelector)
 	if err != nil {
 		// This should be caught by the validation webhook
@@ -334,7 +334,7 @@ func (r *LinkReconciler) getMatchingNodes(ctx context.Context, link *bridgeopera
 
 // handleError handles errors during reconciliation, updating the Link status with the error condition.
 // If an error occurs while updating the conditions, it logs the error and fires an event with the error message.
-func (r *LinkReconciler) handleError(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link, condition metav1.Condition, err error, msg string, args ...any) (ctrl.Result, error) {
+func (r *LinkReconciler) handleError(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link, condition metav1.Condition, err error, msg string, args ...any) (ctrl.Result, error) {
 	logf.FromContext(ctx).Error(err, msg, args...)
 	meta.SetStatusCondition(&link.Status.Conditions, condition)
 	return ctrl.Result{}, errors.Join(err, r.patchResource(ctx, clusterStateLink, link))
@@ -349,7 +349,7 @@ func (r *LinkReconciler) handleError(ctx context.Context, clusterStateLink, link
 // update, and the result can be directly returned from the Reconcile function.
 // The clusterStateLink is the current state of the resource as stored in the cluster, and is used for computing patch diffs.
 // It will be updated with the new state after a successful patch operation.
-func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, link *bridgeoperatorv1alpha1.Link) error {
+func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) error {
 	log := logf.FromContext(ctx)
 
 	// Determine whether the entire resource needs a patch or just the status
@@ -393,7 +393,7 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Watch Link resources for spec changes
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&bridgeoperatorv1alpha1.Link{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&nodenetworkoperatorv1alpha1.Link{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		// Watch node changes for changes that would affect node selector matching
 		Watches(
 			&corev1.Node{},
@@ -431,9 +431,9 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		// Watch NodeLinks pending deletion, and reconcile matching bridges so that their status fields are updated
 		Watches(
-			&bridgeoperatorv1alpha1.NodeLinks{},
+			&nodenetworkoperatorv1alpha1.NodeLinks{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
-				nodeLinks, ok := o.(*bridgeoperatorv1alpha1.NodeLinks)
+				nodeLinks, ok := o.(*nodenetworkoperatorv1alpha1.NodeLinks)
 				if !ok || nodeLinks == nil {
 					return nil
 				}

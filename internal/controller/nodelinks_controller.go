@@ -26,13 +26,13 @@ import (
 
 	"github.com/dominikbraun/graph"
 	"github.com/elliotchance/pie/v2"
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
-	"github.com/solidDoWant/bridge-operator/internal/graphsearch"
-	"github.com/solidDoWant/bridge-operator/internal/links"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
+	"github.com/solidDoWant/node-network-operator/internal/graphsearch"
+	"github.com/solidDoWant/node-network-operator/internal/links"
 	"github.com/vishvananda/netlink"
 )
 
-var nodeLinksFinalizerName = fmt.Sprintf("nodelinks.%s/finalizer", bridgeoperatorv1alpha1.GroupVersion.Group)
+var nodeLinksFinalizerName = fmt.Sprintf("nodelinks.%s/finalizer", nodenetworkoperatorv1alpha1.GroupVersion.Group)
 
 // NodeLinksReconciler reconciles a NodeLinks object
 type NodeLinksReconciler struct {
@@ -51,9 +51,9 @@ func NewNodeLinksReconciler(cluster cluster.Cluster, nodeName string) *NodeLinks
 	}
 }
 
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodelinks/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=bridgeoperator.soliddowant.dev,resources=nodelinks/finalizers,verbs=create;patch
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/finalizers,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=list
 
@@ -67,7 +67,7 @@ func (r *NodeLinksReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	logf.IntoContext(ctx, log)
 
 	// Fetch the NodeLinks instance
-	var nodeLinks bridgeoperatorv1alpha1.NodeLinks
+	var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
 	if err := r.Get(ctx, req.NamespacedName, &nodeLinks); err != nil {
 		log.Error(err, "unable to fetch NodeLinks")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -84,7 +84,7 @@ func (r *NodeLinksReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return r.handleUpsert(ctx, clusterStateNodeLinks, &nodeLinks)
 }
 
-func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNodeLinks, nodeLinks *bridgeoperatorv1alpha1.NodeLinks) (ctrl.Result, error) {
+func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("action", "upsert")
 	logf.IntoContext(ctx, log)
 
@@ -128,7 +128,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	linkResources, err := r.getLinkResources(ctx, nodeLinks)
 	if err != nil {
 		condition := &metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "LinkRetrievalFailed",
 			Message: fmt.Sprintf("Failed to retrieve Link resources: %v", err),
@@ -143,7 +143,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	linkGraph, err := r.buildDesiredLinkGraph(linkResources)
 	if err != nil {
 		condition := &metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "LinkGraphBuildFailed",
 			Message: fmt.Sprintf("Failed to build desired link graph: %v", err),
@@ -154,7 +154,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	sortedLinkResourceNames, err := r.getTopolgicallySortedLinkNames(linkGraph)
 	if err != nil {
 		condition := &metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "LinkGraphTopologicalSortFailed",
 			Message: fmt.Sprintf("Failed to topologically sort desired link graph: %v", err),
@@ -171,7 +171,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	}
 
 	readyCondition := metav1.Condition{
-		Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+		Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 		Status:  metav1.ConditionUnknown,
 		Reason:  "ReadyForUpsert",
 		Message: "Validation complete, ready to upsert links",
@@ -196,7 +196,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	return ctrl.Result{}, r.patchResource(ctx, clusterStateNodeLinks, nodeLinks)
 }
 
-func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNodeLinks, nodeLinks *bridgeoperatorv1alpha1.NodeLinks) (ctrl.Result, error) {
+func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("action", "delete")
 	logf.IntoContext(ctx, log)
 
@@ -224,10 +224,10 @@ func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNo
 	return ctrl.Result{}, nil
 }
 
-func (r *NodeLinksReconciler) getLinkResources(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks) (map[string]*bridgeoperatorv1alpha1.Link, error) {
-	links := make(map[string]*bridgeoperatorv1alpha1.Link, len(nodeLinks.Spec.MatchingLinks))
+func (r *NodeLinksReconciler) getLinkResources(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) (map[string]*nodenetworkoperatorv1alpha1.Link, error) {
+	links := make(map[string]*nodenetworkoperatorv1alpha1.Link, len(nodeLinks.Spec.MatchingLinks))
 	for _, linkName := range pie.Unique(nodeLinks.Spec.MatchingLinks) {
-		var link bridgeoperatorv1alpha1.Link
+		var link nodenetworkoperatorv1alpha1.Link
 		if err := r.Get(ctx, client.ObjectKey{Name: linkName}, &link); err != nil {
 			return nil, fmt.Errorf("failed to get Link %q: %w", linkName, err)
 		}
@@ -242,7 +242,7 @@ func (r *NodeLinksReconciler) getLinkResources(ctx context.Context, nodeLinks *b
 // Validation includes:
 // * Ensuring that there are no duplicate link names in the spec
 // * Ensuring that there are no self-referential links
-func (r *NodeLinksReconciler) validateLinks(nodeLinks *bridgeoperatorv1alpha1.NodeLinks, linkResources map[string]*bridgeoperatorv1alpha1.Link) error {
+func (r *NodeLinksReconciler) validateLinks(nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	seenNetlinkLinkNames := make(map[string]string, len(linkResources))
 
 	errs := make([]error, 0, len(linkResources))
@@ -273,12 +273,12 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *bridgeoperatorv1alpha1.No
 
 		// Update status condition for the link
 		validConfigCondition := metav1.Condition{
-			Type:   bridgeoperatorv1alpha1.NetlinkLinkConditionValidConfiguration,
+			Type:   nodenetworkoperatorv1alpha1.NetlinkLinkConditionValidConfiguration,
 			Status: metav1.ConditionTrue,
 			Reason: "ConfigurationValidated",
 		}
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 			Status:  metav1.ConditionUnknown,
 			Reason:  "ConfigurationValidated",
 			Message: "Link configuration is valid but no actions have been taken yet",
@@ -303,7 +303,7 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *bridgeoperatorv1alpha1.No
 	if err := errors.Join(errs...); err != nil {
 		// Update resource-wide ready condition
 		readyCondition := &metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "InvalidConfiguration",
 			Message: "One or more Link configurations are invalid, see individual link conditions for details",
@@ -322,7 +322,7 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *bridgeoperatorv1alpha1.No
 // an order of operations for reconciling the links.
 // If a dependency is not listed in the provided link resources, dependents are still added to the graph, but the dependency is not.
 // Link configuration should be validated prior to calling this function.
-func (r *NodeLinksReconciler) buildDesiredLinkGraph(links map[string]*bridgeoperatorv1alpha1.Link) (graph.Graph[string, string], error) {
+func (r *NodeLinksReconciler) buildDesiredLinkGraph(links map[string]*nodenetworkoperatorv1alpha1.Link) (graph.Graph[string, string], error) {
 	// Vertices are link resource names. Edges show dependencies, that is an edge from A -> B means that A is a dependency of dependent B.
 	// Calling `PreventCycles()` has negative performance implications, but the impact should be minimal because graphs will only have a few vertices,
 	// and significantly fewer edges. There shouldn't be any cycles created without a bug in the operator, but this is a safety measure, as some of
@@ -378,7 +378,7 @@ func (r *NodeLinksReconciler) getTopolgicallySortedLinkNames(g graph.Graph[strin
 // updateDependentsMissingDependencies sets down links that have invalid dependencies (non-optional dependencies that are missing).
 // sortedLinkResourceNames should be the names of _all_ links in the graph, in topological order. This allows for a single pass over the links.
 // An error is only returned if reconciliation should not proceed. Other errors are logged and the status is updated.
-func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, sortedLinkResourceNames []string, linkResources map[string]*bridgeoperatorv1alpha1.Link) error {
+func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, sortedLinkResourceNames []string, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	allDependenciesExist := true
 
 	errs := pie.Map(sortedLinkResourceNames, func(linkResourceName string) error {
@@ -392,11 +392,11 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 
 		dependencies := linkManager.GetDependencies()
 
-		requiredLinkReferences := pie.Filter(dependencies, func(dependency bridgeoperatorv1alpha1.LinkReference) bool {
+		requiredLinkReferences := pie.Filter(dependencies, func(dependency nodenetworkoperatorv1alpha1.LinkReference) bool {
 			return !dependency.Optional
 		})
 
-		missingLinkReferences := pie.Filter(requiredLinkReferences, func(dependency bridgeoperatorv1alpha1.LinkReference) bool {
+		missingLinkReferences := pie.Filter(requiredLinkReferences, func(dependency nodenetworkoperatorv1alpha1.LinkReference) bool {
 			if _, ok := linkResources[dependency.Name]; ok {
 				// Dependency exists, nothing to do
 				return false
@@ -405,7 +405,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 			return true
 		})
 
-		missingRequiredDependencyNames := pie.Map(missingLinkReferences, func(dependency bridgeoperatorv1alpha1.LinkReference) string {
+		missingRequiredDependencyNames := pie.Map(missingLinkReferences, func(dependency nodenetworkoperatorv1alpha1.LinkReference) string {
 			return dependency.Name
 		})
 
@@ -418,7 +418,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 			}
 
 			readyCondition := metav1.Condition{
-				Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "MissingDependencyLinks",
 				Message: "Link is missing dependency links",
@@ -426,7 +426,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 			r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, readyCondition)
 
 			dependencyCondition := metav1.Condition{
-				Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable,
+				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable,
 				Status:  metav1.ConditionFalse,
 				Reason:  "MissingDependencyLinks",
 				Message: fmt.Sprintf("Link is missing required dependency links: %v", missingRequiredDependencyNames),
@@ -437,19 +437,19 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 		}
 
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 			Status:  metav1.ConditionUnknown,
 			Reason:  "AllDependencyLinksAvailable",
 			Message: "All dependency links are available but no actions have been taken yet",
 		}
 		r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, readyCondition)
 
-		requiredDependencyNames := pie.Map(requiredLinkReferences, func(dependency bridgeoperatorv1alpha1.LinkReference) string {
+		requiredDependencyNames := pie.Map(requiredLinkReferences, func(dependency nodenetworkoperatorv1alpha1.LinkReference) string {
 			return dependency.Name
 		})
 
 		dependencyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable,
+			Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable,
 			Status:  metav1.ConditionTrue,
 			Reason:  "AllDependencyLinksAvailable",
 			Message: fmt.Sprintf("Required dependency links are available: %v", requiredDependencyNames),
@@ -460,7 +460,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 
 	if err := errors.Join(errs...); err != nil {
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "DependencyCheckFailed",
 			Message: "Failed to check links for missing dependencies",
@@ -473,7 +473,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 	if !allDependenciesExist {
 		// Update resource-wide ready condition
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "MissingDependencyLinks",
 			Message: "One or more links are missing required dependency links, see individual link conditions for details",
@@ -490,7 +490,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 // updating links that are not in the desired state, and bringing down links that depend on links that are not in the desired state.
 // sortedLinkResourceNames should be the names of _all_ links in the graph, in topological order. This allows for a single pass over the links.
 // An error is only returned if reconciliation should not proceed. Other errors are logged and the status is updated.
-func (r *NodeLinksReconciler) upsertLinks(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, sortedLinkResourceNames []string, linkResources map[string]*bridgeoperatorv1alpha1.Link, linkGraph graph.Graph[string, string]) error {
+func (r *NodeLinksReconciler) upsertLinks(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, sortedLinkResourceNames []string, linkResources map[string]*nodenetworkoperatorv1alpha1.Link, linkGraph graph.Graph[string, string]) error {
 	errs := pie.Map(sortedLinkResourceNames, func(linkResourceName string) error {
 		if err := r.upsertLink(ctx, nodeLinks, linkResourceName, linkResources, linkGraph); err != nil {
 			logf.FromContext(ctx).Error(err, "failed to upsert link", "linkResource", linkResourceName)
@@ -501,7 +501,7 @@ func (r *NodeLinksReconciler) upsertLinks(ctx context.Context, nodeLinks *bridge
 
 	if err := errors.Join(errs...); err != nil {
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "UpsertFailed",
 			Message: "Failed to upsert one or more links, see individual link conditions for details",
@@ -515,7 +515,7 @@ func (r *NodeLinksReconciler) upsertLinks(ctx context.Context, nodeLinks *bridge
 }
 
 // upsertLink reconciles the desired state of a single link on the node. Link configuration is handled by the link manager.
-func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, linkResourceName string, linkResources map[string]*bridgeoperatorv1alpha1.Link, linkGraph graph.Graph[string, string]) error {
+func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkResourceName string, linkResources map[string]*nodenetworkoperatorv1alpha1.Link, linkGraph graph.Graph[string, string]) error {
 	linkResource := linkResources[linkResourceName]
 	log := logf.FromContext(ctx).WithValues("linkResource", linkResource.Name, "netlinkLinkName", linkResource.Spec.LinkName)
 
@@ -530,7 +530,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 		log.V(1).Info("no conditions found for link, assuming not ready", "link", linkResource.Spec.LinkName)
 
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 			Status:  metav1.ConditionUnknown,
 			Reason:  "MaybeMissingDependencyLinks",
 			Message: "Link conditions not found, assuming link is not ready. This is likely a bug.",
@@ -539,14 +539,14 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 
 		return fmt.Errorf("no conditions found for link %q, assuming not ready", linkResource.Spec.LinkName)
 	}
-	if !meta.IsStatusConditionTrue(linkConditions, bridgeoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable) {
+	if !meta.IsStatusConditionTrue(linkConditions, nodenetworkoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable) {
 		return fmt.Errorf("link %q has missing dependencies", linkResource.Spec.LinkName)
 	}
 
 	upsertNeeded, err := linkManager.IsUpsertNeeded(ctx, nodeLinks, linkResources)
 	if err != nil {
 		readyCOndition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "UpsertCheckFailed",
 			Message: fmt.Sprintf("Failed to determine if upsert is needed: %v", err),
@@ -561,7 +561,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 		if ok {
 			if err := r.bringDownDependents(ctx, nodeLinks, linkResourceName, linkResources, linkGraph); err != nil {
 				readyCondition := metav1.Condition{
-					Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+					Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 					Status:  metav1.ConditionFalse,
 					Reason:  "DependentLinkSetDownFailed",
 					Message: fmt.Sprintf("Failed to bring down all dependent links for chain update: %v", err),
@@ -574,7 +574,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 
 		if err := linkManager.Upsert(ctx, nodeLinks, linkResources); err != nil {
 			readyCondition := metav1.Condition{
-				Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "UpsertFailed",
 				Message: fmt.Sprintf("Failed to upsert link: %v", err),
@@ -589,7 +589,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 	}
 
 	readyCondition := metav1.Condition{
-		Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+		Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 		Status:  metav1.ConditionTrue,
 		Reason:  "ReconcileSuccessful",
 		Message: "Link is in the desired state",
@@ -597,7 +597,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 	r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, readyCondition)
 
 	operationalStateCondition := metav1.Condition{
-		Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionOperationallyUp,
+		Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionOperationallyUp,
 		Status:  metav1.ConditionTrue,
 		Reason:  "LinkUp",
 		Message: "Link is operationally up",
@@ -609,7 +609,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *bridgeo
 
 // bringDownDependents brings down all links in the dependent tree that have SetDownOnDependencyChainUpdate=true.
 // An error is only returned if reconciliation should not proceed. Other errors are logged and the status is updated.
-func (r *NodeLinksReconciler) bringDownDependents(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, linkResourceName string, linkResources map[string]*bridgeoperatorv1alpha1.Link, linkGraph graph.Graph[string, string]) error {
+func (r *NodeLinksReconciler) bringDownDependents(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkResourceName string, linkResources map[string]*nodenetworkoperatorv1alpha1.Link, linkGraph graph.Graph[string, string]) error {
 	linkResource := linkResources[linkResourceName]
 	return graphsearch.BFSWithEdge(linkGraph, linkResource.Name, func(dependentResourceName string, edge *graph.Edge[string]) error {
 		// Skip the root node
@@ -623,7 +623,7 @@ func (r *NodeLinksReconciler) bringDownDependents(ctx context.Context, nodeLinks
 		}
 
 		// Get the link reference from the edge data
-		dependencyLinkRef, ok := edge.Properties.Data.(bridgeoperatorv1alpha1.LinkReference)
+		dependencyLinkRef, ok := edge.Properties.Data.(nodenetworkoperatorv1alpha1.LinkReference)
 		if !ok {
 			// This should never happen because the graph is built with edges for all dependencies
 			return fmt.Errorf("failed to get link reference from edge data for dependency from Link %q to dependent Link %q", linkResource.Name, dependentResourceName)
@@ -650,16 +650,16 @@ func (r *NodeLinksReconciler) bringDownDependents(ctx context.Context, nodeLinks
 }
 
 // deleteUndesiredLinks removes links that are in the NodeLinks status but not in the desired state.
-func (r *NodeLinksReconciler) deleteUndesiredLinks(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) error {
+func (r *NodeLinksReconciler) deleteUndesiredLinks(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	return r.deleteLinks(ctx, nodeLinks, r.getUndesiredLinks(nodeLinks, links))
 }
 
-func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, linkNamesToRemove []string) error {
+func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkNamesToRemove []string) error {
 	// Bring down the undesired links first, preventing a corner case where a dependency link is removed while a dependent link is forwarding traffic.
 	errs := pie.Map(linkNamesToRemove, func(linkName string) error {
 		if err := r.bringDownLink(ctx, nodeLinks, linkName); err != nil {
 			condition := metav1.Condition{
-				Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "LinkSetDownFailed",
 				Message: fmt.Sprintf("Failed to bring down link before deletion: %v", err),
@@ -670,7 +670,7 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *bridge
 		}
 
 		readyCondition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "LinkBeingDeleted",
 			Message: "Link is being deleted",
@@ -681,7 +681,7 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *bridge
 	})
 	if err := errors.Join(errs...); err != nil {
 		condition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "LinkSetDownFailed",
 			Message: "Failed to bring down one or more undesired links before deletion, see individual link conditions for details",
@@ -695,7 +695,7 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *bridge
 	errs = pie.Map(linkNamesToRemove, func(linkName string) error {
 		if err := r.deleteLink(ctx, linkName); err != nil {
 			condition := metav1.Condition{
-				Type:    bridgeoperatorv1alpha1.NetlinkLinkConditionReady,
+				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "LinkDeletionFailed",
 				Message: fmt.Sprintf("Failed to delete link: %v", err),
@@ -712,7 +712,7 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *bridge
 	})
 	if err := errors.Join(errs...); err != nil {
 		condition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "LinkDeletionFailed",
 			Message: "Failed to delete one or more undesired links, see individual link conditions for details",
@@ -725,7 +725,7 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *bridge
 	return nil
 }
 
-func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clusterStateNodeLinks, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) error {
+func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	desiredNetlinkLinkNames := make([]string, 0, len(links))
 	for _, link := range links {
 		desiredNetlinkLinkNames = append(desiredNetlinkLinkNames, link.Spec.LinkName)
@@ -734,7 +734,7 @@ func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clus
 
 	if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
 		condition := metav1.Condition{
-			Type:    bridgeoperatorv1alpha1.NodeLinkConditionReady,
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "StatusUpdateFailed",
 			Message: fmt.Sprintf("Failed to update NodeLinks status with last attempted links: %v", err),
@@ -748,7 +748,7 @@ func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clus
 }
 
 // getUndesiredLinks returns the list of managed netlink link names that are deployed on the node but are not in the desired state.
-func (r *NodeLinksReconciler) getUndesiredLinks(nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) []string {
+func (r *NodeLinksReconciler) getUndesiredLinks(nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) []string {
 	desiredNetlinkLinkNames := make([]string, 0, len(links))
 	for _, link := range links {
 		desiredNetlinkLinkNames = append(desiredNetlinkLinkNames, link.Spec.LinkName)
@@ -760,7 +760,7 @@ func (r *NodeLinksReconciler) getUndesiredLinks(nodeLinks *bridgeoperatorv1alpha
 
 // bringDownLink brings down the provided netlink link. This is used when removing links from the node.
 // If a link is not found, it is ignored.
-func (r *NodeLinksReconciler) bringDownLink(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, linkName string) error {
+func (r *NodeLinksReconciler) bringDownLink(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkName string) error {
 	log := logf.FromContext(ctx).WithValues("link", linkName)
 
 	log.V(1).Info("bringing down link")
@@ -779,7 +779,7 @@ func (r *NodeLinksReconciler) bringDownLink(ctx context.Context, nodeLinks *brid
 	log.V(1).Info("link brought down")
 
 	operationalCondition := metav1.Condition{
-		Type:   bridgeoperatorv1alpha1.NetlinkLinkConditionOperationallyUp,
+		Type:   nodenetworkoperatorv1alpha1.NetlinkLinkConditionOperationallyUp,
 		Status: metav1.ConditionFalse,
 		Reason: "LinkBroughtDown",
 	}
@@ -811,7 +811,7 @@ func (r *NodeLinksReconciler) deleteLink(ctx context.Context, linkName string) e
 	return nil
 }
 
-func (r *NodeLinksReconciler) getLinkManager(link *bridgeoperatorv1alpha1.Link) (links.Manager, error) {
+func (r *NodeLinksReconciler) getLinkManager(link *nodenetworkoperatorv1alpha1.Link) (links.Manager, error) {
 	switch {
 	case link.Spec.Bridge != nil:
 		return links.NewBridgeManager(link), nil
@@ -824,7 +824,7 @@ func (r *NodeLinksReconciler) getLinkManager(link *bridgeoperatorv1alpha1.Link) 
 
 // handleError handles errors during reconciliation, updating the Link status with the error condition.
 // If an error occurs while updating the conditions, it logs the error and fires an event with the error message.
-func (r *NodeLinksReconciler) handleError(ctx context.Context, clusterStateNodeLinks, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, condition *metav1.Condition,
+func (r *NodeLinksReconciler) handleError(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, condition *metav1.Condition,
 	err error, msg string, args ...any) (ctrl.Result, error) {
 	logf.FromContext(ctx).Error(err, msg, args...)
 
@@ -836,16 +836,16 @@ func (r *NodeLinksReconciler) handleError(ctx context.Context, clusterStateNodeL
 }
 
 // setLinkCondition sets a condition for a specific link in the NodeLinks status.
-func (r *NodeLinksReconciler) setLinkCondition(nodeLinks *bridgeoperatorv1alpha1.NodeLinks, netlinkLinkName string, condition metav1.Condition) {
+func (r *NodeLinksReconciler) setLinkCondition(nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, netlinkLinkName string, condition metav1.Condition) {
 	linkConditions, ok := nodeLinks.Status.NetlinkLinkConditions[netlinkLinkName]
 	if !ok {
-		linkConditions = make(bridgeoperatorv1alpha1.NodeLinksStatusConditions, 0, 1)
+		linkConditions = make(nodenetworkoperatorv1alpha1.NodeLinksStatusConditions, 0, 1)
 	}
 	castedLinkConditions := []metav1.Condition(linkConditions)
 	meta.SetStatusCondition(&castedLinkConditions, condition)
 
 	if nodeLinks.Status.NetlinkLinkConditions == nil {
-		nodeLinks.Status.NetlinkLinkConditions = make(map[string]bridgeoperatorv1alpha1.NodeLinksStatusConditions, 1)
+		nodeLinks.Status.NetlinkLinkConditions = make(map[string]nodenetworkoperatorv1alpha1.NodeLinksStatusConditions, 1)
 	}
 
 	nodeLinks.Status.NetlinkLinkConditions[netlinkLinkName] = castedLinkConditions
@@ -860,7 +860,7 @@ func (r *NodeLinksReconciler) setLinkCondition(nodeLinks *bridgeoperatorv1alpha1
 // update, and the result can be directly returned from the Reconcile function.
 // The clusterStateLink is the current state of the resource as stored in the cluster, and is used for computing patch diffs.
 // It will be updated with the new state after a successful patch operation.
-func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNodeLinks, nodeLinks *bridgeoperatorv1alpha1.NodeLinks) error {
+func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) error {
 	log := logf.FromContext(ctx)
 
 	// Determine whether the entire resource needs a patch or just the status
@@ -902,7 +902,7 @@ func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNod
 func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(
-			&bridgeoperatorv1alpha1.NodeLinks{},
+			&nodenetworkoperatorv1alpha1.NodeLinks{},
 			builder.WithPredicates(
 				predicate.GenerationChangedPredicate{},
 				// Filter out events that are not for the current node
@@ -913,9 +913,9 @@ func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		// Watch for changes to Link resources and enqueue the NodeLinks selected by the Link's node selector
 		Watches(
-			&bridgeoperatorv1alpha1.Link{},
+			&nodenetworkoperatorv1alpha1.Link{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				link, ok := obj.(*bridgeoperatorv1alpha1.Link)
+				link, ok := obj.(*nodenetworkoperatorv1alpha1.Link)
 				if !ok {
 					logf.FromContext(ctx).Error(fmt.Errorf("unexpected object type: %T", obj), "failed to map Link to NodeLinks")
 					return nil

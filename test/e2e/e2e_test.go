@@ -12,20 +12,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/solidDoWant/bridge-operator/test/utils"
+	"github.com/solidDoWant/node-network-operator/test/utils"
 )
 
 // namespace where the project is deployed in
-const namespace = "bridge-operator-system"
+const namespace = "node-network-operator-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "bridge-operator-controller-manager"
+const serviceAccountName = "node-network-operator-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "bridge-operator-controller-manager-metrics-service"
+const metricsServiceName = "node-network-operator-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "bridge-operator-metrics-binding"
+const metricsRoleBindingName = "node-network-operator-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -169,7 +169,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=bridge-operator-metrics-reader",
+				"--clusterrole=node-network-operator-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
@@ -257,7 +257,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyCAInjection := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get",
 					"validatingwebhookconfigurations.admissionregistration.k8s.io",
-					"bridge-operator-validating-webhook-configuration",
+					"node-network-operator-validating-webhook-configuration",
 					"-o", "go-template={{ range .webhooks }}{{ .clientConfig.caBundle }}{{ end }}")
 				vwhOutput, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -270,7 +270,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can deploy a sample Link resource", func() {
 			By("creating a sample Link resource")
-			sampleLink := filepath.Join("config", "samples", "bridgeoperator_v1alpha1_link.yaml")
+			sampleLink := filepath.Join("config", "samples", "nodenetworkoperator_v1alpha1_link.yaml")
 			_, err := utils.Run(exec.Command("kubectl", "apply", "-f", sampleLink))
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply sample Link resource")
 

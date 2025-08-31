@@ -1,4 +1,4 @@
-module github.com/solidDoWant/bridge-operator
+module github.com/solidDoWant/node-network-operator
 
 go 1.24.0
 

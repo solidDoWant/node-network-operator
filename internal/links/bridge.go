@@ -4,27 +4,27 @@ import (
 	"context"
 	"fmt"
 
-	bridgeoperatorv1alpha1 "github.com/solidDoWant/bridge-operator/api/v1alpha1"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 	"github.com/vishvananda/netlink"
 )
 
 type BridgeManager struct {
-	link *bridgeoperatorv1alpha1.Link
+	link *nodenetworkoperatorv1alpha1.Link
 }
 
 var _ Manager = (*BridgeManager)(nil)
 
-func NewBridgeManager(link *bridgeoperatorv1alpha1.Link) *BridgeManager {
+func NewBridgeManager(link *nodenetworkoperatorv1alpha1.Link) *BridgeManager {
 	return &BridgeManager{
 		link: link,
 	}
 }
 
-func (m *BridgeManager) GetDependencies() []bridgeoperatorv1alpha1.LinkReference {
+func (m *BridgeManager) GetDependencies() []nodenetworkoperatorv1alpha1.LinkReference {
 	return nil
 }
 
-func (m *BridgeManager) IsUpsertNeeded(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) (bool, error) {
+func (m *BridgeManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) (bool, error) {
 	link, err := netlink.LinkByName(m.link.Spec.LinkName)
 	if err != nil {
 		if IsLinkNotFoundError(err) {
@@ -53,7 +53,7 @@ func (m *BridgeManager) IsUpsertNeeded(ctx context.Context, nodeLinks *bridgeope
 	return false, nil
 }
 
-func (m *BridgeManager) Upsert(ctx context.Context, nodeLinks *bridgeoperatorv1alpha1.NodeLinks, links map[string]*bridgeoperatorv1alpha1.Link) error {
+func (m *BridgeManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	bridge := &netlink.Bridge{
 		LinkAttrs: netlink.NewLinkAttrs(),
 	}

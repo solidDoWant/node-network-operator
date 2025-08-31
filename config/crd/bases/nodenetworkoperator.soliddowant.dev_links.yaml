@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.0.0-20250818134112-b624019bbe8d
-  name: links.bridgeoperator.soliddowant.dev
+  name: links.nodenetworkoperator.soliddowant.dev
 spec:
-  group: bridgeoperator.soliddowant.dev
+  group: nodenetworkoperator.soliddowant.dev
   names:
     kind: Link
     listKind: LinkList
