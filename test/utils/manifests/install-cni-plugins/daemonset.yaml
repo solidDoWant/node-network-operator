@@ -1,0 +1,38 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: install-cni-plugins
+spec:
+  selector:
+    matchLabels:
+      app: install-cni-plugins
+  template:
+    metadata:
+      labels:
+        app: install-cni-plugins
+    spec:
+      containers:
+        - name: install-cni-plugins
+          image: ubuntu
+          command:
+            - /install.sh
+          volumeMounts:
+            - name: install-cni-plugins
+              mountPath: /install.sh
+              subPath: install.sh
+              readOnly: true
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+      volumes:
+        - name: install-cni-plugins
+          configMap:
+            name: install-cni-plugins
+            defaultMode: 0755
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+            type: DirectoryOrCreate
+      # Don't require pod networking to be up for this to run
+      hostNetwork: true
+      terminationGracePeriodSeconds: 0

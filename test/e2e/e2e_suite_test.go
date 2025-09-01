@@ -35,6 +35,12 @@ var (
 	// isWhereaboutsAlreadyInstalled will be set true when Whereabouts CRDs be found on the cluster
 	isWhereaboutsAlreadyInstalled = false
 
+	// These variables are useful if the basic CNI plugins are already installed, avoiding
+	// re-installation and conflicts.
+	skipCNIPluginsInstall = os.Getenv("CNI_PLUGINS_INSTALL_SKIP") == "true"
+	// isCNIPluginsAlreadyInstalled will be set true when basic CNI plugins DaemonSet be found on the cluster
+	isCNIPluginsAlreadyInstalled = false
+
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "ghcr.io/soliddowant/node-network-operator:v0.0.1"
@@ -107,9 +113,26 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Whereabouts is already installed. Skipping installation...\n")
 		}
 	}
+
+	if !skipCNIPluginsInstall {
+		By("checking if basic CNI plugins are installed already")
+		isCNIPluginsAlreadyInstalled = utils.IsCNIPluginsInstalled()
+		if !isCNIPluginsAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing basic CNI plugins...\n")
+			Expect(utils.InstallCNIPlugins()).To(Succeed(), "Failed to install basic CNI plugins")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: basic CNI plugins are already installed. Skipping installation...\n")
+		}
+	}
 })
 
 var _ = AfterSuite(func() {
+	// Teardown basic CNI plugins after the suite if not skipped and if it was not already installed
+	if !skipCNIPluginsInstall && !isCNIPluginsAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling basic CNI plugins...\n")
+		utils.UninstallCNIPlugins()
+	}
+
 	// Teardown Whereabouts after the suite if not skipped and if it was not already installed
 	if !skipWhereaboutsInstall && !isWhereaboutsAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Whereabouts...\n")

@@ -284,6 +284,53 @@ func IsWhereaboutsCRDsInstalled() bool {
 	return false
 }
 
+// UninstallCNIPlugins uninstalls the basic CNI plugins
+// Note that this only removes the DaemonSet, not the CNI binaries on each node.
+func UninstallCNIPlugins() {
+	cmd := exec.Command("kubectl", "delete", "-k", "test/utils/manifests/install-cni-plugins")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// InstallCNIPlugins installs the basic CNI plugins on all nodes
+func InstallCNIPlugins() error {
+	cmd := exec.Command("kubectl", "apply", "-k", "test/utils/manifests/install-cni-plugins")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for the daemonset to be ready
+	cmd = exec.Command("kubectl", "rollout", "status", "daemonset.apps/install-cni-plugins",
+		"--namespace", "kube-system",
+		"--timeout", "5m",
+	)
+
+	_, err := Run(cmd)
+	return err
+}
+
+// IsCNIPluginsInstalled checks if the basic CNI plugins are installed on all nodes
+// by verifying the existence of the "bridge" CNI plugin binary in each node's CNI bin directory.
+func IsCNIPluginsInstalled() bool {
+	nodeCmd, err := Run(exec.Command("kubectl", "get", "nodes", "-o", "name"))
+	if err != nil {
+		return false
+	}
+
+	for _, node := range GetNonEmptyLines(nodeCmd) {
+		node := strings.TrimPrefix(node, "node/")
+
+		// Check if the bridge CNI plugin is installed
+		_, err := Run(exec.Command("docker", "exec", node, "ls", "/opt/cni/bin/bridge"))
+		if err != nil {
+			return false
+		}
+	}
+
+	return true
+}
+
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
 	cluster := "kind"
