@@ -29,6 +29,12 @@ var (
 	// isMultusAlreadyInstalled will be set true when Multus CRDs be found on the cluster
 	isMultusAlreadyInstalled = false
 
+	// These variables are useful if whereabouts is already installed, avoiding
+	// re-installation and conflicts.
+	skipWhereaboutsInstall = os.Getenv("WHEREABOUTS_INSTALL_SKIP") == "true"
+	// isWhereaboutsAlreadyInstalled will be set true when Whereabouts CRDs be found on the cluster
+	isWhereaboutsAlreadyInstalled = false
+
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "ghcr.io/soliddowant/node-network-operator:v0.0.1"
@@ -90,13 +96,24 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Multus is already installed. Skipping installation...\n")
 		}
 	}
+
+	if !skipWhereaboutsInstall {
+		By("checking if whereabouts is installed already")
+		isWhereaboutsAlreadyInstalled = utils.IsWhereaboutsCRDsInstalled()
+		if !isWhereaboutsAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Whereabouts...\n")
+			Expect(utils.InstallWhereabouts()).To(Succeed(), "Failed to install Whereabouts")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Whereabouts is already installed. Skipping installation...\n")
+		}
+	}
 })
 
 var _ = AfterSuite(func() {
-	// Teardown CertManager after the suite if not skipped and if it was not already installed
-	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
-		utils.UninstallCertManager()
+	// Teardown Whereabouts after the suite if not skipped and if it was not already installed
+	if !skipWhereaboutsInstall && !isWhereaboutsAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Whereabouts...\n")
+		utils.UninstallWhereabouts()
 	}
 
 	// Teardown Multus after the suite if not skipped and if it was not already installed
@@ -104,4 +121,11 @@ var _ = AfterSuite(func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Multus...\n")
 		utils.UninstallMultus()
 	}
+
+	// Teardown CertManager after the suite if not skipped and if it was not already installed
+	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
+		utils.UninstallCertManager()
+	}
+
 })

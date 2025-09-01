@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
@@ -21,6 +22,17 @@ const (
 
 	multusVersion = "v4.2.2"
 	multusURLTmpl = "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/refs/tags/%s/deployments/multus-daemonset-thick.yml"
+
+	whereaboutsVersion = "v0.9.2"
+	whereaboutsURL     = "https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/refs/tags/%s/doc/crds/%s"
+)
+
+var (
+	whereaboutsFiles = []string{
+		"whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml",
+		"whereabouts.cni.cncf.io_ippools.yaml",
+		"daemonset-install.yaml",
+	}
 )
 
 func warnError(err error) {
@@ -197,6 +209,71 @@ func IsMultusCRDsInstalled() bool {
 	// Check if any of the Multus CRDs are present
 	crdList := GetNonEmptyLines(output)
 	for _, crd := range multusCRDs {
+		for _, line := range crdList {
+			if strings.Contains(line, crd) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// UninstallWhereabouts uninstalls the Whereabouts IPAM CNI plugin
+func UninstallWhereabouts() {
+	// Reverse the order of this for uninstall
+	uninstallFiles := slices.Clone(whereaboutsFiles)
+	slices.Reverse(uninstallFiles)
+
+	for _, file := range uninstallFiles {
+		url := fmt.Sprintf(whereaboutsURL, whereaboutsVersion, file)
+		cmd := exec.Command("kubectl", "delete", "-f", url)
+		if _, err := Run(cmd); err != nil {
+			warnError(err)
+		}
+	}
+}
+
+// InstallWhereabouts installs the Whereabouts IPAM CNI plugin
+func InstallWhereabouts() error {
+	for _, file := range whereaboutsFiles {
+		url := fmt.Sprintf(whereaboutsURL, whereaboutsVersion, file)
+		cmd := exec.Command("kubectl", "apply", "-f", url)
+		if _, err := Run(cmd); err != nil {
+			return err
+		}
+	}
+
+	// Wait for whereabouts daemonset to be ready, which can take time if whereabouts
+	// was re-installed after uninstalling on a cluster.
+	cmd := exec.Command("kubectl", "rollout", "status", "daemonset.apps/whereabouts",
+		"--namespace", "kube-system",
+		"--timeout", "5m",
+	)
+
+	_, err := Run(cmd)
+	return err
+}
+
+// IsWhereaboutsCRDsInstalled checks if any Whereabouts CRDs are installed
+// by verifying the existence of key CRDs related to Whereabouts.
+func IsWhereaboutsCRDsInstalled() bool {
+	// List of common Whereabouts CRDs
+	whereaboutsCRDs := []string{
+		"ippools.whereabouts.cni.cncf.io",
+		"overlappingrangeipreservations.whereabouts.cni.cncf.io",
+	}
+
+	// Execute the kubectl command to get all CRDs
+	cmd := exec.Command("kubectl", "get", "crds")
+	output, err := Run(cmd)
+	if err != nil {
+		return false
+	}
+
+	// Check if any of the Whereabouts CRDs are present
+	crdList := GetNonEmptyLines(output)
+	for _, crd := range whereaboutsCRDs {
 		for _, line := range crdList {
 			if strings.Contains(line, crd) {
 				return true
