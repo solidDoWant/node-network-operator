@@ -306,7 +306,7 @@ var _ = Describe("Manager", Ordered, func() {
 			nodes := utils.GetNonEmptyLines(nodeCmd)
 
 			for _, node := range nodes {
-				node := strings.TrimLeft(node, "node/")
+				node := strings.TrimPrefix(node, "node/")
 				verifyNodeLinkCreated := func(g Gomega) {
 					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
