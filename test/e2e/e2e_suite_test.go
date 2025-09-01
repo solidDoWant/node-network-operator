@@ -15,11 +15,19 @@ import (
 var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
+	// - MULTUS_INSTALL_SKIP=true: Skips multus installation during test setup.
+
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
+
+	// These variables are useful if multus is already installed, avoiding
+	// re-installation and conflicts.
+	skipMultusInstall = os.Getenv("MULTUS_INSTALL_SKIP") == "true"
+	// isMultusAlreadyInstalled will be set true when Multus CRDs be found on the cluster
+	isMultusAlreadyInstalled = false
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
@@ -71,6 +79,17 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
+
+	if !skipMultusInstall {
+		By("checking if multus is installed already")
+		isMultusAlreadyInstalled = utils.IsMultusCRDsInstalled()
+		if !isMultusAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Multus...\n")
+			Expect(utils.InstallMultus()).To(Succeed(), "Failed to install Multus")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Multus is already installed. Skipping installation...\n")
+		}
+	}
 })
 
 var _ = AfterSuite(func() {
@@ -78,5 +97,11 @@ var _ = AfterSuite(func() {
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
 		utils.UninstallCertManager()
+	}
+
+	// Teardown Multus after the suite if not skipped and if it was not already installed
+	if !skipMultusInstall && !isMultusAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Multus...\n")
+		utils.UninstallMultus()
 	}
 })

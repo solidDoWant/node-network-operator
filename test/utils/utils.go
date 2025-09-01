@@ -18,6 +18,9 @@ const (
 
 	certmanagerVersion = "v1.16.3"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
+
+	multusVersion = "v4.2.2"
+	multusURLTmpl = "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/refs/tags/%s/deployments/multus-daemonset-thick.yml"
 )
 
 func warnError(err error) {
@@ -139,6 +142,61 @@ func IsCertManagerCRDsInstalled() bool {
 	// Check if any of the Cert Manager CRDs are present
 	crdList := GetNonEmptyLines(output)
 	for _, crd := range certManagerCRDs {
+		for _, line := range crdList {
+			if strings.Contains(line, crd) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// UninstallMultus uninstalls the Multus CNI
+func UninstallMultus() {
+	url := fmt.Sprintf(multusURLTmpl, multusVersion)
+	cmd := exec.Command("kubectl", "delete", "-f", url)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// InstallMultus installs the Multus CNI
+func InstallMultus() error {
+	url := fmt.Sprintf(multusURLTmpl, multusVersion)
+	cmd := exec.Command("kubectl", "apply", "-f", url)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	// Wait for multus-daemonset to be ready, which can take time if multus
+	// was re-installed after uninstalling on a cluster.
+	cmd = exec.Command("kubectl", "rollout", "status", "daemonset.apps/kube-multus-ds",
+		"--namespace", "kube-system",
+		"--timeout", "5m",
+	)
+
+	_, err := Run(cmd)
+	return err
+}
+
+// IsMultusCRDsInstalled checks if any Multus CRDs are installed
+// by verifying the existence of key CRDs related to Multus.
+func IsMultusCRDsInstalled() bool {
+	// List of common Multus CRDs
+	multusCRDs := []string{
+		"network-attachment-definitions.k8s.cni.cncf.io",
+	}
+
+	// Execute the kubectl command to get all CRDs
+	cmd := exec.Command("kubectl", "get", "crds")
+	output, err := Run(cmd)
+	if err != nil {
+		return false
+	}
+
+	// Check if any of the Multus CRDs are present
+	crdList := GetNonEmptyLines(output)
+	for _, crd := range multusCRDs {
 		for _, line := range crdList {
 			if strings.Contains(line, crd) {
 				return true
