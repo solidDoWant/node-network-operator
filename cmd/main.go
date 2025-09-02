@@ -50,6 +50,8 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var nodeName string
+	var enableClusterWideControllers bool
+	var enableNodeSpecificControllers bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -68,6 +70,10 @@ func main() {
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&nodeName, "node-name", "", "The name of the node this operator is running on.")
+	flag.BoolVar(&enableClusterWideControllers, "enable-cluster-wide-controllers", true,
+		"If set, controllers that watch cluster-wide resources (such as Links) will be enabled, provided that the pod is the leader (if leadership is enabled).")
+	flag.BoolVar(&enableNodeSpecificControllers, "enable-node-specific-controllers", true,
+		"If set, controllers that watch node-specific resources (such as NodeLinks) will be enabled.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -94,31 +100,34 @@ func main() {
 	// Create watchers for metrics and webhooks certificates
 	var metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher
 
-	// Initial webhook TLS options
-	webhookTLSOpts := tlsOpts
+	var webhookServer webhook.Server
+	if enableClusterWideControllers {
+		// Initial webhook TLS options
+		webhookTLSOpts := tlsOpts
 
-	if len(webhookCertPath) > 0 {
-		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
-			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
+		if len(webhookCertPath) > 0 {
+			setupLog.Info("Initializing webhook certificate watcher using provided certificates",
+				"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
 
-		var err error
-		webhookCertWatcher, err = certwatcher.New(
-			filepath.Join(webhookCertPath, webhookCertName),
-			filepath.Join(webhookCertPath, webhookCertKey),
-		)
-		if err != nil {
-			setupLog.Error(err, "Failed to initialize webhook certificate watcher")
-			os.Exit(1)
+			var err error
+			webhookCertWatcher, err = certwatcher.New(
+				filepath.Join(webhookCertPath, webhookCertName),
+				filepath.Join(webhookCertPath, webhookCertKey),
+			)
+			if err != nil {
+				setupLog.Error(err, "Failed to initialize webhook certificate watcher")
+				os.Exit(1)
+			}
+
+			webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
+				config.GetCertificate = webhookCertWatcher.GetCertificate
+			})
 		}
 
-		webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
-			config.GetCertificate = webhookCertWatcher.GetCertificate
+		webhookServer = webhook.NewServer(webhook.Options{
+			TLSOpts: webhookTLSOpts,
 		})
 	}
-
-	webhookServer := webhook.NewServer(webhook.Options{
-		TLSOpts: webhookTLSOpts,
-	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
@@ -179,16 +188,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := controller.NewLinkReconciler(mgr).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Link")
-		os.Exit(1)
+	if enableClusterWideControllers {
+		if err := controller.NewLinkReconciler(mgr).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Link")
+			os.Exit(1)
+		}
 	}
-	if err := controller.NewNodeLinksReconciler(mgr, nodeName).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NodeLinks")
-		os.Exit(1)
+
+	if enableNodeSpecificControllers {
+		if err := controller.NewNodeLinksReconciler(mgr, nodeName).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "NodeLinks")
+			os.Exit(1)
+		}
 	}
+
 	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if enableClusterWideControllers && os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err := webhookv1alpha1.SetupLinkWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Link")
 			os.Exit(1)
