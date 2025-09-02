@@ -136,7 +136,7 @@ type UnmanagedSpec struct {
 	// It serves as a marker to indicate that the link is unmanaged.
 }
 
-// +kubebuilder:validation:ExactlyOneOf=bridge;vxlan
+// +kubebuilder:validation:ExactlyOneOf=bridge;vxlan;unmanaged
 type LinkSpecs struct {
 	// Bridge defines the desired state of the link as a bridge.
 	// +optional

@@ -82,6 +82,10 @@
           "x-kubernetes-map-type": "atomic",
           "additionalProperties": false
         },
+        "unmanaged": {
+          "description": "Unmanaged indicates that the link is unmanaged by the operator.\nThis can be used to reference links that are managed outside of the operator.",
+          "type": "object"
+        },
         "vxlan": {
           "description": "VXLAN defines the desired state of the link as a VXLAN.",
           "properties": {
@@ -206,8 +210,8 @@
       "type": "object",
       "x-kubernetes-validations": [
         {
-          "message": "exactly one of the fields in [bridge vxlan] must be set",
-          "rule": "[has(self.bridge),has(self.vxlan)].filter(x,x==true).size() == 1"
+          "message": "exactly one of the fields in [bridge vxlan unmanaged] must be set",
+          "rule": "[has(self.bridge),has(self.vxlan),has(self.unmanaged)].filter(x,x==true).size() == 1"
         }
       ],
       "additionalProperties": false

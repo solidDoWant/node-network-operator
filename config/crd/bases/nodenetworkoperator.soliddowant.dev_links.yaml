@@ -267,9 +267,10 @@ spec:
             - interfaceName
             type: object
             x-kubernetes-validations:
-            - message: exactly one of the fields in [bridge vxlan] must be set
-              rule: '[has(self.bridge),has(self.vxlan)].filter(x,x==true).size() ==
-                1'
+            - message: exactly one of the fields in [bridge vxlan unmanaged] must
+                be set
+              rule: '[has(self.bridge),has(self.vxlan),has(self.unmanaged)].filter(x,x==true).size()
+                == 1'
           status:
             description: status defines the observed state of Link
             properties:
