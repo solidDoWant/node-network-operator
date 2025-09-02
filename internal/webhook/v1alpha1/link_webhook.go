@@ -2,7 +2,9 @@ package v1alpha1
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,17 +58,44 @@ func (v *LinkCustomValidator) validate(obj runtime.Object) (admission.Warnings, 
 
 	linklog.Info("Validation for Link", "name", link.GetName())
 
+	errs := make([]error, 0, 2)
 	if err := v.validateNodeSelector(link); err != nil {
-		return nil, err
+		errs = append(errs, err)
 	}
 
-	return nil, nil
+	if err := v.validateLinkSpecs(link); err != nil {
+		errs = append(errs, err)
+	}
+
+	return nil, errors.Join(errs...)
 }
 
 func (v *LinkCustomValidator) validateNodeSelector(link *nodenetworkoperatorv1alpha1.Link) error {
 	_, err := metav1.LabelSelectorAsSelector(&link.Spec.NodeSelector)
 	if err != nil {
 		return fmt.Errorf("invalid node selector: %w", err)
+	}
+
+	return nil
+}
+
+func (v *LinkCustomValidator) validateLinkSpecs(link *nodenetworkoperatorv1alpha1.Link) error {
+	switch {
+	case link.Spec.VXLAN != nil:
+		return v.validateVXLAN(link)
+	default:
+		return nil
+	}
+}
+
+func (v *LinkCustomValidator) validateVXLAN(link *nodenetworkoperatorv1alpha1.Link) error {
+	return v.validateVXLANRemote(link)
+}
+
+func (v *LinkCustomValidator) validateVXLANRemote(link *nodenetworkoperatorv1alpha1.Link) error {
+	remoteAddress := net.ParseIP(link.Spec.VXLAN.RemoteIPAddress)
+	if remoteAddress.IsMulticast() && link.Spec.VXLAN.Device == nil {
+		return fmt.Errorf("VXLAN remote IP %s is multicast, so a device must be specified (netlink requirement)", link.Spec.VXLAN.RemoteIPAddress)
 	}
 
 	return nil
