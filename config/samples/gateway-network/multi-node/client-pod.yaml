@@ -5,6 +5,8 @@ metadata:
   name: client-pod
   annotations:
     k8s.v1.cni.cncf.io/networks: gateway-network-client-pods
+  labels:
+    app: client-pod
 spec:
   containers:
     - name: client-pod
@@ -13,7 +15,7 @@ spec:
         - sleep
         - "3600"
   affinity:
-    podAffinity:
+    podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
         - labelSelector:
             matchExpressions:

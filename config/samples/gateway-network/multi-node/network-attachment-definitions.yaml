@@ -1,0 +1,47 @@
+# TODO NOTE: The following iptables rule is needed due to the kind CNI plugin to avoid masquerading the gateway bridge traffic
+# iptables -t nat -I KIND-MASQ-AGENT 1 -s 192.168.50.0/24 -m comment --comment "multus: gateway pod network is not subject to MASQUERADE" -j RETURN
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: gateway-network-client-pods
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.0",
+      "name": "gateway-network-client-pods",
+      "type": "bridge",
+      "bridge": "gatewaybridge0",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "192.168.50.0/24",
+        "exclude": [
+           "192.168.50.1/32"
+        ],
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ],
+        "gateway": "192.168.50.1"
+      }
+    }
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: gateway-network-router-pod
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.0",
+      "name": "gateway-network-router-pod",
+      "type": "bridge",
+      "bridge": "gatewaybridge0",
+      "ipam": {
+        "type": "static",
+        "addresses": [
+          {
+            "address": "192.168.50.1/24"
+          }
+        ]
+      }
+    }

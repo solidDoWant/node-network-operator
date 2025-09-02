@@ -1,0 +1,20 @@
+---
+apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
+kind: Link
+metadata:
+  name: gateway-bridge
+spec:
+  interfaceName: gatewaybridge0
+  bridge: {}
+---
+apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
+kind: Link
+metadata:
+  name: gateway-vxlan
+spec:
+  interfaceName: gatewayvxlan0
+  vxlan:
+    vnid: 1000
+    remoteIPAddress: 224.0.0.88
+    master:
+      name: gateway-bridge

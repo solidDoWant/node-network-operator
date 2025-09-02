@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./client-pod.yaml
+  - ./links.yaml
+  - ./network-attachment-definitions.yaml
+  - ./router-pod.yaml
+configMapGenerator:
+  - name: gateway-network-setup
+    files:
+      - ./router-setup.sh
