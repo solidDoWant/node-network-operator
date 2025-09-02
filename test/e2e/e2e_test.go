@@ -346,7 +346,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}()
 
 			By("deploying the gateway-network sample")
-			sampleDir := filepath.Join("config", "samples", "gateway-network")
+			sampleDir := filepath.Join("config", "samples", "gateway-network", "single-node")
 			_, err := utils.Run(exec.Command("kubectl", "apply", "-n", namespace, "-k", sampleDir))
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply gateway-network sample")
 
