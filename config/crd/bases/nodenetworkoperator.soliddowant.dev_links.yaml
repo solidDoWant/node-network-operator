@@ -108,6 +108,11 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
+              unmanaged:
+                description: |-
+                  Unmanaged indicates that the link is unmanaged by the operator.
+                  This can be used to reference links that are managed outside of the operator.
+                type: object
               vxlan:
                 description: VXLAN defines the desired state of the link as a VXLAN.
                 properties:
