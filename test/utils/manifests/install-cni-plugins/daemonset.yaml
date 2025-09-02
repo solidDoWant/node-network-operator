@@ -33,6 +33,11 @@ spec:
           hostPath:
             path: /opt/cni/bin
             type: DirectoryOrCreate
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
       # Don't require pod networking to be up for this to run
       hostNetwork: true
       terminationGracePeriodSeconds: 0

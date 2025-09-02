@@ -32,6 +32,8 @@ spec:
       nodeSelector:
         kubernetes.io/os: linux
       hostNetwork: true
+      tolerations:
+        - operator: Exists
       securityContext:
         seccompProfile:
           type: RuntimeDefault
