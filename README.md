@@ -21,7 +21,8 @@ and then a CNI plugin with bridge support ([such as the bridge CNI plugin](https
 This can also be used in conjunction with a third-party CNI to build a classical L2/L3 overlay network between specific pods. This was
 built to be an alternative to the [pod-gateway](https://github.com/angelnu/pod-gateway/) project when used with the bridge CNI plugin
 and [multus](https://github.com/k8snetworkplumbingwg/multus-cni). This allows for routing the traffic of specific pods through a
-separate "gateway" pod, without needing to give the pods the `NET_ADMIN` capability.
+separate "gateway" pod, without needing to give the pods the `NET_ADMIN` capability. See [here](./config/samples/gateway-network/README.md)
+for an example.
 
 ## Getting Started
 

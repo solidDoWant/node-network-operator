@@ -10,11 +10,21 @@ spec:
 apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
 kind: Link
 metadata:
+  name: gateway-underlay-link
+spec:
+  interfaceName: eth0
+  unmanaged: {}
+---
+apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
+kind: Link
+metadata:
   name: gateway-vxlan
 spec:
   interfaceName: gatewayvxlan0
   vxlan:
     vnid: 1000
     remoteIPAddress: 224.0.0.88
+    device:
+      name: gateway-underlay-link
     master:
       name: gateway-bridge

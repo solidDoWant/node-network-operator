@@ -26,7 +26,10 @@
 		"vscode": {
 			"extensions": [
 				"redhat.vscode-yaml",
-				"ms-kubernetes-tools.vscode-kubernetes-tools"
+				"ms-kubernetes-tools.vscode-kubernetes-tools",
+				"bierner.markdown-mermaid",
+				"yzhang.markdown-all-in-one",
+				"hediet.vscode-drawio"
 			]
 		}
 	}

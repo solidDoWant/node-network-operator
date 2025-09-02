@@ -1,0 +1,162 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36" version="28.1.2">
+  <diagram name="Page-1" id="0uHXvQXZobljOzGVFPQb">
+    <mxGraphModel dx="3753" dy="2076" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-27" value="Node 1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="260" y="245" width="550" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-1" value="Client Pod" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="408" y="275" width="255" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endArrow=diamond;endFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-3">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="315" y="505" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-3" value="Primary CNI plugin&lt;br&gt;&lt;br&gt;eth0" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="418" y="405" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-4" value="Bridge CNI plugin&lt;br&gt;&lt;br&gt;192.168.50.2/24&lt;br&gt;veth: net1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="548" y="405" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-5" value="Container" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="418" y="305" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-5" target="ZAoUQ8ObvNrSKgbO1jp7-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=oval;endFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-5" target="ZAoUQ8ObvNrSKgbO1jp7-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-15" value="Network operator&lt;br&gt;&lt;br&gt;&lt;br&gt;bridge: gatewaybridge0" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="395" y="525" width="410" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-4" target="ZAoUQ8ObvNrSKgbO1jp7-33">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="444.8" y="465" as="sourcePoint" />
+            <mxPoint x="444.8" y="525" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-26" value="" style="endArrow=none;dashed=1;html=1;dashPattern=1 3;strokeWidth=2;rounded=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-30">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="312.56499999999994" y="524.1" as="sourcePoint" />
+            <mxPoint x="315" y="505" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-30" value="CNI plugin-specific traffic logic" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="265" y="525" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-83" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.869;exitY=0.981;exitDx=0;exitDy=0;entryX=0.173;entryY=1.018;entryDx=0;entryDy=0;shape=link;exitPerimeter=0;entryPerimeter=0;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-31" target="ZAoUQ8ObvNrSKgbO1jp7-75">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="570" y="725" />
+              <mxPoint x="1130" y="725" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-85" value="VXLAN overlay network&lt;br&gt;MC group address 224.0.0.88&lt;br&gt;VNID 1000" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=light-dark(#f5f5f5, #959595);labelBorderColor=default;spacing=10;" vertex="1" connectable="0" parent="ZAoUQ8ObvNrSKgbO1jp7-83">
+          <mxGeometry x="0.005" relative="1" as="geometry">
+            <mxPoint x="4" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-31" value="Physical interface&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;eth: eth0&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#bac8d3;strokeColor=#23445d;" vertex="1" parent="1">
+          <mxGeometry x="483" y="625" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-33" value="Bridge CNI plugin&lt;br&gt;&lt;br&gt;&lt;br&gt;veth: vethABC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="705" y="525" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-60" value="Network operator&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;vxlan:&lt;/div&gt;&lt;div&gt;gatewayvxlan0&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="395" y="535" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-61" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-60" target="ZAoUQ8ObvNrSKgbO1jp7-31">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="445" y="615" />
+              <mxPoint x="603" y="615" />
+              <mxPoint x="603" y="655" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-62" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-30" target="ZAoUQ8ObvNrSKgbO1jp7-31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-63" value="Node 2" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="890" y="245" width="550" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-64" value="Router Pod" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1038" y="275" width="255" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-65" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endArrow=diamond;endFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-66">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="945" y="505" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-66" value="Primary CNI plugin&lt;br&gt;&lt;br&gt;eth0" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1048" y="405" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-67" value="Bridge CNI plugin&lt;br&gt;&lt;br&gt;192.168.50.1/24&lt;br&gt;veth: net1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1178" y="405" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-68" value="Container" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1048" y="305" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-69" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-68" target="ZAoUQ8ObvNrSKgbO1jp7-66">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-70" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=oval;endFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-68" target="ZAoUQ8ObvNrSKgbO1jp7-67">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-71" value="Network operator&lt;br&gt;&lt;br&gt;&lt;br&gt;bridge: gatewaybridge0" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1025" y="525" width="410" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-72" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-67" target="ZAoUQ8ObvNrSKgbO1jp7-76">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1074.8" y="465" as="sourcePoint" />
+            <mxPoint x="1074.8" y="525" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-73" value="" style="endArrow=none;dashed=1;html=1;dashPattern=1 3;strokeWidth=2;rounded=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-74">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="942.5649999999999" y="524.1" as="sourcePoint" />
+            <mxPoint x="945" y="505" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-74" value="CNI plugin-specific traffic logic" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="895" y="525" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-75" value="Physical interface&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;eth: eth0&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#bac8d3;strokeColor=#23445d;" vertex="1" parent="1">
+          <mxGeometry x="1113" y="625" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-76" value="Bridge CNI plugin&lt;br&gt;&lt;br&gt;&lt;br&gt;veth: vethABC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1335" y="525" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-77" value="Network operator&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;vxlan:&lt;/div&gt;&lt;div&gt;gatewayvxlan0&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1025" y="535" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-78" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-77" target="ZAoUQ8ObvNrSKgbO1jp7-75">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1075" y="615" />
+              <mxPoint x="1233" y="615" />
+              <mxPoint x="1233" y="655" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-79" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-74" target="ZAoUQ8ObvNrSKgbO1jp7-75">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-80" value="External network" style="sketch=0;points=[[0.5,0,0],[1,0.5,0],[0.5,1,0],[0,0.5,0],[0.145,0.145,0],[0.8555,0.145,0],[0.855,0.8555,0],[0.145,0.855,0]];verticalLabelPosition=bottom;html=1;verticalAlign=top;aspect=fixed;align=center;pointerEvents=1;shape=mxgraph.cisco19.rect;prIcon=router;fillColor=light-dark(#f5f5f5, #161616);strokeColor=#005073;" vertex="1" parent="1">
+          <mxGeometry x="800" y="745" width="110" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-82" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-75" target="ZAoUQ8ObvNrSKgbO1jp7-80">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ZAoUQ8ObvNrSKgbO1jp7-81" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=oval;endFill=1;startArrow=oval;startFill=1;" edge="1" parent="1" source="ZAoUQ8ObvNrSKgbO1jp7-31" target="ZAoUQ8ObvNrSKgbO1jp7-80">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

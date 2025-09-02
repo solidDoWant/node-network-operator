@@ -32,6 +32,7 @@ spec:
       configMap:
         name: gateway-network-setup
         defaultMode: 0755
+  # This is just here to ensure that the router pod and client pods are not scheduled on the same node.
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -42,4 +43,9 @@ spec:
                 values:
                   - client-pod
           topologyKey: kubernetes.io/hostname
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+    - operator: Exists
+      effect: NoExecute
   terminationGracePeriodSeconds: 0
