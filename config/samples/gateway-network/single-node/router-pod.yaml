@@ -1,0 +1,35 @@
+---
+# This pod accepts traffic from client pods via the gateway network, rewrites it so that it looks like the traffic
+# is coming from this router pod, and sends it out to the external network. In this example the default route is
+# handled by the "normal" CNI (e.g. kindnet, Cilium, Calico, etc.) but the container image couuld be switched for
+# something like qmcgaw/gluetun and traffic would instead be sent out through a VPN tunnel.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: router-pod
+  annotations:
+    k8s.v1.cni.cncf.io/networks: gateway-network-router-pod
+  labels:
+    app: router-pod
+spec:
+  containers:
+    - name: router-pod
+      image: jonlabelle/network-tools
+      command:
+        - /setup.sh
+      securityContext:
+        capabilities:
+          add:
+            # Needed for iptables commands to set up masquerading
+            - NET_ADMIN
+      volumeMounts:
+        - name: setup
+          mountPath: /setup.sh
+          subPath: router-setup.sh
+          readOnly: true
+  volumes:
+    - name: setup
+      configMap:
+        name: gateway-network-setup
+        defaultMode: 0755
+  terminationGracePeriodSeconds: 0

@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -301,22 +300,100 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyLinkCreated).Should(Succeed())
 
 			By("validating that the NodeLinks resource succeeds")
-			nodeCmd, err := utils.Run(exec.Command("kubectl", "get", "nodes", "-o", "name"))
-			Expect(err).NotTo(HaveOccurred(), "Failed to get nodes")
-			nodes := utils.GetNonEmptyLines(nodeCmd)
-
-			for _, node := range nodes {
-				node := strings.TrimPrefix(node, "node/")
-				verifyNodeLinkCreated := func(g Gomega) {
+			Expect(utils.ForEachNode(func(node string) error {
+				Eventually(func(g Gomega) {
 					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
 					g.Expect(isReady).To(Equal("True"), "NodeLinks resource should be ready")
 
 					_, err = utils.Run(exec.Command("docker", "container", "exec", node, "ip", "link", "show", "sampleBridge1"))
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to verify link on node")
-				}
-				Eventually(verifyNodeLinkCreated).Should(Succeed())
-			}
+				}).Should(Succeed())
+
+				return nil
+			})).To(Succeed())
+		})
+
+		It("can support the gateway-network sample", func() {
+			By("adding a KIND-specific iptables rule to allow traffic to the gateway-network router pod")
+			Expect(utils.ForEachNode(func(nodeName string) error {
+				// TODO NOTE: The following iptables rule is needed due to the kind CNI plugin to avoid masquerading the gateway bridge traffic
+				// iptables -t nat -I KIND-MASQ-AGENT 1 -s 192.168.50.0/24 -m comment --comment "multus: gateway pod network is not subject to MASQUERADE" -j RETURN
+				cmd := exec.Command(
+					"docker", "container", "exec", nodeName,
+					"iptables",
+					"-t", "nat",
+					"-I", "KIND-MASQ-AGENT", "1",
+					"-s", "192.168.50.0/24",
+					"-m", "comment", "--comment", "multus: gateway pod network is not subject to MASQUERADE",
+					"-j", "RETURN")
+				_, err := utils.Run(cmd)
+				return err
+			})).To(Succeed(), "Failed to add iptables rule")
+
+			defer func() {
+				By("removing the KIND-specific iptables rule")
+				Expect(utils.ForEachNode(func(nodeName string) error {
+					// Remove the iptables rule we added earlier
+					cmd := exec.Command(
+						"docker", "container", "exec", nodeName,
+						"iptables",
+						"-t", "nat",
+						"-D", "KIND-MASQ-AGENT", "1")
+					_, err := utils.Run(cmd)
+					return err
+				})).To(Succeed(), "Failed to remove iptables rule")
+			}()
+
+			By("deploying the gateway-network sample")
+			sampleDir := filepath.Join("config", "samples", "gateway-network")
+			_, err := utils.Run(exec.Command("kubectl", "apply", "-n", namespace, "-k", sampleDir))
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply gateway-network sample")
+
+			defer func() {
+				By("deleting the gateway-network sample")
+				_, err := utils.Run(exec.Command("kubectl", "delete", "-n", namespace, "-k", sampleDir))
+				Expect(err).NotTo(HaveOccurred(), "Failed to delete gateway-network sample")
+
+				// Wait for the resources to be deleted
+				Eventually(func(g Gomega) {
+					// NetworkAttachmentDefinition resources
+					_, err := utils.Run(exec.Command("kubectl", "get", "-n", namespace, "net-attach-def", "gateway-network-client-pods"))
+					g.Expect(err).To(HaveOccurred(), "NetworkAttachmentDefinition resource should be deleted")
+					_, err = utils.Run(exec.Command("kubectl", "get", "-n", namespace, "net-attach-def", "gateway-network-router-pod"))
+					g.Expect(err).To(HaveOccurred(), "NetworkAttachmentDefinition resource should be deleted")
+
+					// Pods
+					_, err = utils.Run(exec.Command("kubectl", "get", "pod", "-n", namespace, "client-pod"))
+					g.Expect(err).To(HaveOccurred(), "Client pod should be deleted")
+					_, err = utils.Run(exec.Command("kubectl", "get", "pod", "-n", namespace, "router-pod"))
+					g.Expect(err).To(HaveOccurred(), "Router pod should be deleted")
+				}).Should(Succeed())
+			}()
+
+			By("validating that the client-pod is running")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", "client-pod", "-n", namespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to get client-pod status")
+				g.Expect(output).To(Equal("Running"), "client-pod should be running")
+			}, 2*time.Minute).Should(Succeed())
+
+			By("validating that the router-pod is running")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", "router-pod", "-n", namespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Failed to get router-pod status")
+				g.Expect(output).To(Equal("Running"), "router-pod should be running")
+			}, 2*time.Minute).Should(Succeed())
+
+			By("validating that the client-pod can ping the router-pod")
+			_, err = utils.Run(exec.Command("kubectl", "exec", "-n", namespace, "client-pod", "--", "ping", "-c", "3", "192.168.50.1"))
+			Expect(err).NotTo(HaveOccurred(), "client-pod should be able to ping the router-pod")
+
+			By("validating that the router-pod can reach the external network")
+			_, err = utils.Run(exec.Command("kubectl", "exec", "-n", namespace, "client-pod", "--", "ping", "-c", "3", "1.1.1.1"))
+			Expect(err).NotTo(HaveOccurred(), "router-pod should be able to reach the external network")
 		})
 	})
 })

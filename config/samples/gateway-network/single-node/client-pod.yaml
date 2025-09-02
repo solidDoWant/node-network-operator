@@ -1,0 +1,25 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client-pod
+  annotations:
+    k8s.v1.cni.cncf.io/networks: gateway-network-client-pods
+spec:
+  containers:
+    - name: client-pod
+      image: jonlabelle/network-tools
+      command:
+        - sleep
+        - "3600"
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - router-pod
+          topologyKey: "kubernetes.io/hostname"
+  terminationGracePeriodSeconds: 0

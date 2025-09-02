@@ -313,22 +313,11 @@ func InstallCNIPlugins() error {
 // IsCNIPluginsInstalled checks if the basic CNI plugins are installed on all nodes
 // by verifying the existence of the "bridge" CNI plugin binary in each node's CNI bin directory.
 func IsCNIPluginsInstalled() bool {
-	nodeCmd, err := Run(exec.Command("kubectl", "get", "nodes", "-o", "name"))
-	if err != nil {
-		return false
-	}
-
-	for _, node := range GetNonEmptyLines(nodeCmd) {
-		node := strings.TrimPrefix(node, "node/")
-
+	return ForEachNode(func(node string) error {
 		// Check if the bridge CNI plugin is installed
 		_, err := Run(exec.Command("docker", "exec", node, "ls", "/opt/cni/bin/bridge"))
-		if err != nil {
-			return false
-		}
-	}
-
-	return true
+		return err
+	}) == nil
 }
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
@@ -414,6 +403,24 @@ func UncommentCode(filename, target, prefix string) error {
 	// nolint:gosec
 	if err = os.WriteFile(filename, out.Bytes(), 0644); err != nil {
 		return fmt.Errorf("failed to write file %q: %w", filename, err)
+	}
+
+	return nil
+}
+
+func ForEachNode(f func(nodeName string) error) error {
+	cmd := exec.Command("kubectl", "get", "nodes", "-o", "name")
+	output, err := Run(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to get nodes: %w", err)
+	}
+
+	nodes := GetNonEmptyLines(output)
+	for _, node := range nodes {
+		node = strings.TrimPrefix(node, "node/")
+		if err := f(node); err != nil {
+			return fmt.Errorf("failed to execute function on node %q: %w", node, err)
+		}
 	}
 
 	return nil
