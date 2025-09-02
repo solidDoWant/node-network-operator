@@ -130,6 +130,12 @@ type BridgeSpec struct {
 	MTU *int32 `json:"mtu,omitempty"`
 }
 
+// UnmanagedSpec defines that the link is unmanaged by the operator.
+type UnmanagedSpec struct {
+	// This struct is intentionally left empty.
+	// It serves as a marker to indicate that the link is unmanaged.
+}
+
 // +kubebuilder:validation:ExactlyOneOf=bridge;vxlan
 type LinkSpecs struct {
 	// Bridge defines the desired state of the link as a bridge.
@@ -139,6 +145,11 @@ type LinkSpecs struct {
 	// VXLAN defines the desired state of the link as a VXLAN.
 	// +optional
 	VXLAN *VXLANSpecs `json:"vxlan,omitempty"`
+
+	// Unmanaged indicates that the link is unmanaged by the operator.
+	// This can be used to reference links that are managed outside of the operator.
+	// +optional
+	Unmanaged *UnmanagedSpec `json:"unmanaged,omitempty"`
 }
 
 // LinkSpec defines the desired state of Link

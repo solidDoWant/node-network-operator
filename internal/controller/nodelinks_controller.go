@@ -413,8 +413,14 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 		if len(missingRequiredDependencyNames) > 0 {
 			allDependenciesExist = false
 
-			if err := r.bringDownLink(ctx, nodeLinks, linkResource.Spec.LinkName); err != nil {
-				return fmt.Errorf("failed to bring down link %q due to missing dependencies: %w", linkResource.Spec.LinkName, err)
+			// This point should never be hit for unmanaged links, because unmanaged links cannot have dependencies.
+			// However, this is a safety measure in case of a bug in the operator.
+			if linkManager.IsManaged() {
+				if err := r.bringDownLink(ctx, nodeLinks, linkResource.Spec.LinkName); err != nil {
+					return fmt.Errorf("failed to bring down link %q due to missing dependencies: %w", linkResource.Spec.LinkName, err)
+				}
+			} else {
+				logf.FromContext(ctx).Error(nil, "unmanaged link has missing required dependencies, this should never happen", "linkResource", linkResource.Name, "missingDependencies", missingRequiredDependencyNames)
 			}
 
 			readyCondition := metav1.Condition{
@@ -641,6 +647,18 @@ func (r *NodeLinksReconciler) bringDownDependents(ctx context.Context, nodeLinks
 			return fmt.Errorf("failed to get link resource for Link %q", dependentResourceName)
 		}
 
+		linkManager, err := r.getLinkManager(dependentLinkResource)
+		if err != nil {
+			// This should never happen because the links have already been validated
+			return fmt.Errorf("failed to get link manager for Link %q: %w", dependentResourceName, err)
+		}
+
+		// This should never happen because unmanaged links cannot have dependencies, but this is a safety measure in case of a bug in the operator.
+		if !linkManager.IsManaged() {
+			logf.FromContext(ctx).Error(nil, "unmanaged link has SetDownOnDependencyChainUpdate=true, this should never happen", "linkResource", dependentLinkResource.Name)
+			return fmt.Errorf("link %q has SetDownOnDependencyChainUpdate=true on a reference but is unmanaged, this should never happen", dependentLinkResource.Name)
+		}
+
 		if err := r.bringDownLink(ctx, nodeLinks, dependentLinkResource.Spec.LinkName); err != nil {
 			return fmt.Errorf("failed to bring down dependent link %q: %w", dependentLinkResource.Spec.LinkName, err)
 		}
@@ -728,7 +746,16 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *nodene
 func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
 	desiredNetlinkLinkNames := make([]string, 0, len(links))
 	for _, link := range links {
-		desiredNetlinkLinkNames = append(desiredNetlinkLinkNames, link.Spec.LinkName)
+		linkManager, err := r.getLinkManager(link)
+		if err != nil {
+			return fmt.Errorf("failed to get link manager for Link %q: %w", link.Name, err)
+		}
+
+		// This is critically important: only managed links should be tracked in LastAttemptedNetlinkLinks.
+		// If unmanaged links are included here, then they will be subject to updates and removals via the operator.
+		if linkManager.IsManaged() {
+			desiredNetlinkLinkNames = append(desiredNetlinkLinkNames, link.Spec.LinkName)
+		}
 	}
 	nodeLinks.Status.LastAttemptedNetlinkLinks = desiredNetlinkLinkNames
 
@@ -817,6 +844,8 @@ func (r *NodeLinksReconciler) getLinkManager(link *nodenetworkoperatorv1alpha1.L
 		return links.NewBridgeManager(link), nil
 	case link.Spec.VXLAN != nil:
 		return links.NewVXLANManager(link), nil
+	case link.Spec.Unmanaged != nil:
+		return links.NewUnmanagedManager(), nil
 	default:
 		return nil, fmt.Errorf("link uses not-yet-supported link type (bug)")
 	}

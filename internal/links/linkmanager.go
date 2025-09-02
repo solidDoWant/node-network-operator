@@ -18,6 +18,9 @@ type Manager interface {
 
 	// Upsert brings the link to the desired state. This will only be called if IsUpsertNeeded returns true.
 	Upsert(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error
+
+	// IsManaged returns true if the link is managed by the operator. Links not managed by the operator will not be created, updated, or deleted.
+	IsManaged() bool
 }
 
 // doesLinkRefNeedUpdate checks if the current link reference needs to be updated to match the desired configuration.

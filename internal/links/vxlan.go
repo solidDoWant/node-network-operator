@@ -15,6 +15,8 @@ type VXLANManager struct {
 	link *nodenetworkoperatorv1alpha1.Link
 }
 
+var _ Manager = (*VXLANManager)(nil)
+
 func NewVXLANManager(link *nodenetworkoperatorv1alpha1.Link) *VXLANManager {
 	return &VXLANManager{
 		link: link,
@@ -164,6 +166,10 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 	}
 
 	return nil
+}
+
+func (m *VXLANManager) IsManaged() bool {
+	return true
 }
 
 func (m *VXLANManager) forceReplace(desiredLink netlink.Link) func(existingLink netlink.Link) bool {

@@ -81,3 +81,7 @@ func (m *BridgeManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperat
 
 	return nil
 }
+
+func (m *BridgeManager) IsManaged() bool {
+	return true
+}
