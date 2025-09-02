@@ -124,13 +124,6 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 		}
 	}
 
-	desiredRemoteAddress := net.ParseIP(m.link.Spec.VXLAN.RemoteIPAddress)
-	if !vxlan.Group.Equal(desiredRemoteAddress) {
-		if err := linkSetVXLANGroup(vxlan, desiredRemoteAddress); err != nil {
-			return fmt.Errorf("failed to set VXLAN group for %q: %w", m.link.Spec.LinkName, err)
-		}
-	}
-
 	needsUpdate, err := doesLinkRefNeedUpdate(m.link.Spec.VXLAN.Device, vxlan.VtepDevIndex, links)
 	if err != nil {
 		return fmt.Errorf("failed to check if device link needs update: %w", err)
@@ -143,6 +136,15 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 
 		if err := linkSetVXLANVtepDevIndex(vxlan, desiredIndex); err != nil {
 			return fmt.Errorf("failed to set VXLAN VTEP device for %q: %w", m.link.Spec.LinkName, err)
+		}
+	}
+
+	// Important: this must be done _after_ the link VTEP device index is set, as the kernel
+	// requires that multicast group membership is done on the VTEP device.
+	desiredRemoteAddress := net.ParseIP(m.link.Spec.VXLAN.RemoteIPAddress)
+	if !vxlan.Group.Equal(desiredRemoteAddress) {
+		if err := linkSetVXLANGroup(vxlan, desiredRemoteAddress); err != nil {
+			return fmt.Errorf("failed to set VXLAN group for %q: %w", m.link.Spec.LinkName, err)
 		}
 	}
 
