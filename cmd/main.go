@@ -82,6 +82,11 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	if enableNodeSpecificControllers && nodeName == "" {
+		setupLog.Error(nil, "the --node-name flag is required when --enable-node-specific-controllers is set to true")
+		os.Exit(1)
+	}
+
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
@@ -196,6 +201,7 @@ func main() {
 	}
 
 	if enableNodeSpecificControllers {
+
 		if err := controller.NewNodeLinksReconciler(mgr, nodeName).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "NodeLinks")
 			os.Exit(1)
