@@ -32,11 +32,6 @@ var (
 	linkFinalizerName = fmt.Sprintf("link.%s/finalizer", nodenetworkoperatorv1alpha1.GroupVersion.Group)
 )
 
-// type linkTypeReconciler interface {
-// 	func upsertLink(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) (ctrl.Result, error)
-
-// }
-
 // LinkReconciler reconciles a Link object
 type LinkReconciler struct {
 	client.Client
