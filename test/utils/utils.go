@@ -320,6 +320,19 @@ func IsCNIPluginsInstalled() bool {
 	}) == nil
 }
 
+// InstallSelfSignedIssuer installs a self-signed issuer for testing purposes
+func InstallSelfSignedIssuer() error {
+	_, err := Run(exec.Command("kubectl", "apply", "-f", "test/utils/manifests/selfsigned-issuer/issuer.yaml"))
+	return err
+}
+
+// UninstallSelfSignedIssuer uninstalls the self-signed issuer
+func UninstallSelfSignedIssuer() {
+	if _, err := Run(exec.Command("kubectl", "delete", "-f", "test/utils/manifests/selfsigned-issuer/issuer.yaml")); err != nil {
+		warnError(err)
+	}
+}
+
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
 	cluster := "kind"
