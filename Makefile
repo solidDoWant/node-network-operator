@@ -174,6 +174,10 @@ CONTAINER_BUILD_LABEL_VARS = org.opencontainers.image.source=https://github.com/
 CONTAINER_BUILD_LABELS := $(foreach var,$(CONTAINER_BUILD_LABEL_VARS),--label $(var))
 CONTAINER_PLATFORMS := $(BINARY_PLATFORMS)
 
+.PHONY: print-container-image-tag
+print-container-image-tag:	## Print the container image tag.
+	@echo $(CONTAINER_IMAGE_TAG)
+
 LOCAL_BUILDERS += container-image
 .PHONY: container-image
 container-image: binary licenses	## Build the container image for the local platform.
@@ -202,6 +206,10 @@ LOCAL_BUILDERS += helm
 ALL_BUILDERS += helm
 .PHONY: helm
 helm: $(HELM_PACKAGE)	## Package and optionally push the Helm chart to the registry.
+
+.PHONY: print-helm-package
+print-helm-package:	## Print the Helm package path.
+	@echo $(HELM_PACKAGE)
 
 .PHONY: build-installer
 LOCAL_BUILDERS += build-installer

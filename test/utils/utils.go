@@ -340,8 +340,7 @@ func LoadImageToKindClusterWithName(name string) error {
 		cluster = v
 	}
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
-	cmd := exec.Command("kind", kindOptions...)
-	_, err := Run(cmd)
+	_, err := Run(exec.Command("kind", kindOptions...))
 	return err
 }
 

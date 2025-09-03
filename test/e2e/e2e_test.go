@@ -33,7 +33,7 @@ var _ = Describe("Manager", Ordered, func() {
 		setupTeardown()
 
 		BeforeAll(func() {
-			By("deploying the controller-manager")
+			By("deploying the controller-manager with Kustomize")
 			cmd := exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
@@ -70,21 +70,28 @@ var _ = Describe("Manager", Ordered, func() {
 				utils.UninstallSelfSignedIssuer()
 			})
 
-			By("deploying the controller-manager HELM SETUP")
+			By("building the Helm chart")
+			_, err := utils.Run(exec.Command("make", "helm"))
+			Expect(err).NotTo(HaveOccurred(), "Failed to build the Helm chart")
+			helmPackagePath, err := utils.Run(exec.Command("make", "print-helm-package"))
+			Expect(err).NotTo(HaveOccurred(), "Failed to get Helm package path")
+			helmPackagePath = strings.TrimSpace(helmPackagePath)
+
+			By("deploying the controller-manager with Helm")
 			projectImageRepo, projectImageTag, found := strings.Cut(projectImage, ":")
 			Expect(found).To(BeTrue(), "Project image tag not found in image name")
 
 			chartName := "node-network-operator"
 
 			cmd := exec.Command(
-				"helm", "install", chartName, "./deploy/charts/node-network-operator",
+				"helm", "install", chartName, helmPackagePath,
 				"--namespace", namespace,
 				"--set", "config.image.repository="+projectImageRepo,
 				"--set", "config.image.tag="+projectImageTag,
 				"--set", "config.webhook.issuerRef.kind=ClusterIssuer",
 				"--set", "config.webhook.issuerRef.name=self-signed",
 			)
-			_, err := utils.Run(cmd)
+			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
 			DeferCleanup(func() {
