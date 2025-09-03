@@ -1,7 +1,6 @@
 MAKEFLAGS += --no-print-directory
-
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+PROJECT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+MODULE_NAME := $(shell go list -m)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -63,9 +62,17 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: check-licenses
+check-licenses: ## Check licenses of dependencies.
+	@go run github.com/google/go-licenses@latest report ./...
+
 .PHONY: test
 test: manifests generate fmt vet setup-envtest $(GINKGO) ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GINKGO) run -race -cover -vet="" $$(go list ./... | grep -v /e2e | sed "s~$$(go list -m)/~~")
+
+.PHONY: run
+run: manifests generate fmt vet schemas ## Run a controller from your host.
+	go run ./cmd/main.go
 
 KIND_CLUSTER ?= node-network-operator-test-e2e
 
@@ -102,49 +109,118 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
-##@ Build
+##@ Build and Release
 
-.PHONY: build
-build: manifests generate fmt vet schemas ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+VERSION = 0.0.1-dev
+CONTAINER_REGISTRY = ghcr.io/soliddowant
+HELM_REGISTRY = ghcr.io/soliddowant/charts
+PUSH_ALL ?= false
 
-.PHONY: run
-run: manifests generate fmt vet schemas ## Run a controller from your host.
-	go run ./cmd/main.go
+BUILD_DIR := $(PROJECT_DIR)/build
 
-# If you wish to build the manager image targeting other platforms you can use the --platform flag.
-# (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
-# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+BINARY_DIR = $(BUILD_DIR)/binaries
+BINARY_PLATFORMS = linux/amd64 linux/arm64
+BINARY_NAME = node-network-operator
+GO_SOURCE_FILES = $(shell find ./cmd ./internal ./api \( -name '*.go' ! -name '*_test.go' \))
+GO_LDFLAGS := -s -w
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+LOCALOS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+LOCALARCH := $(shell uname -m | sed 's/x86_64/amd64/')
+LOCAL_BINARY_PATH := $(BINARY_DIR)/$(LOCALOS)/$(LOCALARCH)/$(BINARY_NAME)
 
-# PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
-# - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
-# - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
-# To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
-.PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name node-network-operator-builder
-	$(CONTAINER_TOOL) buildx use node-network-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm node-network-operator-builder
-	rm Dockerfile.cross
+$(BINARY_DIR)/%/$(BINARY_NAME): $(GO_SOURCE_FILES)
+	@mkdir -p "$(@D)"
+	@CGO_ENABLED=0 GOOS="$(word 1,$(subst /, ,$*))" GOARCH="$(word 2,$(subst /, ,$*))" go build -ldflags="$(GO_LDFLAGS)" -o "$@" ./cmd/
+
+LOCAL_BUILDERS += binary
+.PHONY: binary
+binary: $(LOCAL_BINARY_PATH)	## Build the operator binary for the local platform.
+
+ALL_BUILDERS += binary-all
+.PHONY: binary-all
+binary-all: $(BINARY_PLATFORMS:%=$(BINARY_DIR)/%/$(BINARY_NAME))	## Build the operator binary for all supported platforms.
+
+LICENSE_DIR = $(BUILD_DIR)/licenses
+GO_DEPENDENCIES_LICENSE_DIR = $(LICENSE_DIR)/go-dependencies
+BUILT_LICENSES := $(LICENSE_DIR)/LICENSE $(GO_DEPENDENCIES_LICENSE_DIR)
+
+$(BUILT_LICENSES) &: go.mod LICENSE
+	@mkdir -p "$(LICENSE_DIR)"
+	@cp LICENSE "$(LICENSE_DIR)"
+	@rm -rf "$(GO_DEPENDENCIES_LICENSE_DIR)"
+	@go run github.com/google/go-licenses@latest save ./... --save_path="$(GO_DEPENDENCIES_LICENSE_DIR)" --ignore "$(MODULE_NAME)"
+
+ALL_BUILDERS += licenses
+.PHONY: licenses
+licenses: $(BUILT_LICENSES)	## Gather licenses of the project and its dependencies.
+
+TARBALL_DIR = $(BUILD_DIR)/tarballs
+LOCAL_TARBALL_PATH := $(TARBALL_DIR)/$(LOCALOS)/$(LOCALARCH)/$(BINARY_NAME).tar.gz
+
+$(TARBALL_DIR)/%/$(BINARY_NAME).tar.gz: $(BINARY_DIR)/%/$(BINARY_NAME) licenses
+	@mkdir -p "$(@D)"
+	@tar -czf "$@" -C "$(BINARY_DIR)/$*" "$(BINARY_NAME)" -C "$(dir $(LICENSE_DIR))" "$(notdir $(LICENSE_DIR))"
+
+PHONY += tarball
+LOCAL_BUILDERS += tarball
+tarball: $(LOCAL_TARBALL_PATH)	## Create a tarball with the operator binary and licenses for the local platform.
+
+PHONY += tarball-all
+ALL_BUILDERS += tarball-all
+tarball-all: $(BINARY_PLATFORMS:%=$(TARBALL_DIR)/%/$(BINARY_NAME).tar.gz)	## Create tarballs with the operator binary and licenses for all supported platforms.
+
+CONTAINER_IMAGE_TAG = $(CONTAINER_REGISTRY)/$(BINARY_NAME):$(VERSION)
+CONTAINER_BUILD_LABEL_VARS = org.opencontainers.image.source=https://github.com/solidDoWant/node-network-operator org.opencontainers.image.licenses=AGPL-3.0
+CONTAINER_BUILD_LABELS := $(foreach var,$(CONTAINER_BUILD_LABEL_VARS),--label $(var))
+CONTAINER_PLATFORMS := $(BINARY_PLATFORMS)
+
+LOCAL_BUILDERS += container-image
+.PHONY: container-image
+container-image: binary licenses	## Build the container image for the local platform.
+	$(CONTAINER_TOOL) buildx build --platform linux/$(LOCALARCH) -t $(CONTAINER_IMAGE_TAG) --load $(CONTAINER_BUILD_LABELS) .
+
+CONTAINER_MANIFEST_PUSH ?= $(PUSH_ALL)
+
+ALL_BUILDERS += container-manifest
+.PHONY: container-manifest
+container-manifest: PUSH_ARG = $(if $(findstring t,$(CONTAINER_MANIFEST_PUSH)),--push)
+container-manifest: $(CONTAINER_PLATFORMS:%=$(BINARY_DIR)/%/$(BINARY_NAME)) licenses	## Build and optionally push the container image for all supported platforms.
+	@docker buildx build $(CONTAINER_PLATFORMS:%=--platform %) $(PUSH_ARG) -t $(CONTAINER_IMAGE_TAG) $(CONTAINER_BUILD_LABELS) .
+
+HELM_CHART_DIR := $(PROJECT_DIR)/deploy/charts/node-network-operator
+HELM_CHART_FILES = $(shell find $(HELM_CHART_DIR) -type f)
+HELM_PACKAGE = $(BUILD_DIR)/helm/node-network-operator-$(VERSION).tgz
+HELM_PUSH ?= $(PUSH_ALL)
+
+$(HELM_PACKAGE): PUSH_CHECK = $(if $(findstring t,$(HELM_PUSH)),true,false)
+$(HELM_PACKAGE): $(HELM_CHART_FILES)
+	@mkdir -p "$(@D)"
+	@helm package "$(HELM_CHART_DIR)" --dependency-update --version "$(VERSION)" --app-version "$(VERSION)" --destination "$(@D)"
+	@$(PUSH_CHECK) && helm push "$(HELM_PACKAGE)" oci://$(HELM_REGISTRY) || true
+
+LOCAL_BUILDERS += helm
+ALL_BUILDERS += helm
+.PHONY: helm
+helm: $(HELM_PACKAGE)	## Package and optionally push the Helm chart to the registry.
 
 .PHONY: build-installer
+LOCAL_BUILDERS += build-installer
+build-installer: INSTALLER_DIR := $(BUILD_DIR)/installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
-	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default > dist/install.yaml
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTAINER_IMAGE_TAG}
+	mkdir -p "$(INSTALLER_DIR)"
+	$(KUSTOMIZE) build config/default > "$(INSTALLER_DIR)/install.yaml"
+
+.PHONY: build
+build: manifests generate fmt vet schemas $(LOCAL_BUILDERS) ## Builds all local outputs (binaries, tarballs, licenses, etc.).
+
+.PHONY: build-all
+build-all: $(ALL_BUILDERS)	## Builds all outputs for all supported platforms (binaries, tarballs, licenses, etc.).
+
+.PHONY: clean
+clean:	## Clean up all build artifacts.
+	@rm -rf $(BUILD_DIR) $(WORKING_DIR) $(HELM_CHART_DIR)/charts
+	@docker image rm -f $(CONTAINER_IMAGE_TAG) 2> /dev/null > /dev/null || true
 
 ##@ Deployment
 
@@ -162,7 +238,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests schemas kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTAINER_IMAGE_TAG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
