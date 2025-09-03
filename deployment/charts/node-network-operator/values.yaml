@@ -338,6 +338,7 @@ resources:
               - links
             verbs:
               - list
+              - watch
     bindings:
       election:
         enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
