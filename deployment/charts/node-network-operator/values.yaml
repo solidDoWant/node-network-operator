@@ -374,10 +374,11 @@ resources:
       apiVersion: policy/v1
       kind: PodDisruptionBudget
       spec:
-        minAvailable: 1
-        unhealthyPodEvictionPolicy: AlwaysAllow
-        selector:
-          matchLabels:
-            app.kubernetes.io/instance: "{{ .Release.Name }}"
-            app.kubernetes.io/name: '{{ include "bjw-s.common.lib.chart.names.name" . }}'
-            app.kubernetes.io/controller: cluster
+        spec:
+          minAvailable: 1
+          unhealthyPodEvictionPolicy: AlwaysAllow
+          selector:
+            matchLabels:
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              app.kubernetes.io/name: '{{ include "bjw-s.common.lib.chart.names.name" . }}'
+              app.kubernetes.io/controller: cluster
