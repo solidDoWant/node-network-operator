@@ -26,6 +26,8 @@
         {{- $templatedArgs = append $templatedArgs (tpl $arg $) -}}
     {{- end -}}
     {{- $_ := set $containerConfig "args" $templatedArgs -}}
+    {{- $containerImage := index $containerConfig "image" -}}
+    {{- $_ := set $containerImage "repository" (tpl (index $containerImage "repository") $) -}}
     {{- end -}}
 {{- end -}}
 

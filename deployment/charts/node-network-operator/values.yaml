@@ -12,6 +12,9 @@ config:
   clusterDomain: cluster.local
   clusterController:
     replicas: 2
+  image:
+    repository: ghcr.io/soliddowant/node-network-operator
+    tag: "{{ .Chart.AppVersion }}"
 resources:
   # For schema, see
   # https://raw.githubusercontent.com/bjw-s-labs/helm-charts/refs/tags/common-4.2.0/charts/library/common/values.schema.json
@@ -44,8 +47,8 @@ resources:
       containers:
         node-network-operator:
           image:
-            repository: ghcr.io/soliddowant/node-network-operator
-            tag: "{{ .Chart.AppVersion }}"
+            repository: "{{ .Values.config.image.repository }}"
+            tag: "{{ tpl .Values.config.image.tag . }}"
           args:
             - --metrics-bind-address=:9974
             - --health-probe-bind-address=127.0.0.1:9335
@@ -102,8 +105,8 @@ resources:
       containers:
         node-network-operator:
           image:
-            repository: ghcr.io/soliddowant/node-network-operator
-            tag: "{{ .Chart.AppVersion }}"
+            repository: "{{ .Values.config.image.repository }}"
+            tag: "{{ tpl .Values.config.image.tag . }}"
           args:
             - --metrics-bind-address=:9973
             - --health-probe-bind-address=127.0.0.1:9334
