@@ -77,7 +77,7 @@ var _ = Describe("Manager", Ordered, func() {
 			chartName := "node-network-operator"
 
 			cmd := exec.Command(
-				"helm", "install", chartName, "./deployment/charts/node-network-operator",
+				"helm", "install", chartName, "./deploy/charts/node-network-operator",
 				"--namespace", namespace,
 				"--set", "config.image.repository="+projectImageRepo,
 				"--set", "config.image.tag="+projectImageTag,
