@@ -154,7 +154,7 @@ resources:
     webhook-server-cert:
       enabled: "{{ .Values.config.webhook.enableTLS }}"
       type: secret
-      name: node-network-operator-webhook-serving-certs
+      name: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
       defaultMode: 0440
       advancedMounts:
         cluster:
@@ -328,6 +328,7 @@ resources:
       kind: Certificate
       spec:
         spec:
+          secretName: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
           dnsNames:
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}'
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc'
