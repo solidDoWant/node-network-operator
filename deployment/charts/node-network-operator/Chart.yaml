@@ -1,0 +1,11 @@
+---
+apiVersion: v2
+name: node-network-operator
+description: Manage node network configuration via Kubernetes resources
+type: application
+version: 0.0.1-dev
+appVersion: 0.0.1-dev
+dependencies:
+  - name: common
+    repository: https://bjw-s-labs.github.io/helm-charts
+    version: 4.2.0

@@ -1,0 +1,380 @@
+# High-level configuration for the node-network-operator chart.
+config:
+  # Enable TLS on the webhook endpoints. This requires cert-manager to be installed in the cluster.
+  webhook:
+    enableTLS: true
+    issuerRef:
+      kind: Issuer
+      name: selfsigned-issuer
+  # Set this to true if the operator should manage network configurations PRIOR to the setup of the primary CNI.
+  # Let me know if you're doing this - I'd like to know how I can improve the operator to better support this use case.
+  noRequireCNI: false
+  clusterDomain: cluster.local
+  clusterController:
+    replicas: 2
+resources:
+  # For schema, see
+  # https://raw.githubusercontent.com/bjw-s-labs/helm-charts/refs/tags/common-4.2.0/charts/library/common/values.schema.json
+  controllers:
+    cluster:
+      type: deployment
+      replicas: "{{ .Values.config.clusterController.replicas }}"
+      serviceAccount:
+        identifier: cluster
+      pod:
+        # Note: This should be `true` if the operator needs to manage network configurations PRIOR to the setup
+        # of the primary CNI. The gateway-network sample can technically be used as a primary CNI. In that case,
+        # this should be `true` or the pod will never start.
+        hostNetwork: "{{ .Values.config.noRequireCNI }}"
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          seccompProfile:
+            type: RuntimeDefault
+        nodeSelector:
+          kubernetes.io/os: linux
+        tolerations:
+          # The cluster-wide operator should generally be allowed to run even if a node is tainted. Without at
+          # least one instance of the node-network-operator running, no network configuration changes can be
+          # applied to nodes.
+          - operator: Exists
+            effect: NoSchedule
+          - operator: Exists
+            effect: NoExecute
+      containers:
+        node-network-operator:
+          image:
+            repository: ghcr.io/soliddowant/node-network-operator
+            tag: "{{ .Chart.AppVersion }}"
+          args:
+            - --metrics-bind-address=:9974
+            - --health-probe-bind-address=127.0.0.1:9335
+            - --leader-elect={{ .Values.config.clusterController.replicas | int | lt 1 }}
+            - --webhook-cert-path={{ if .Values.config.webhook.enableTLS -}}/tmp/k8s-webhook-server/serving-certs{{- else -}}""{{ end }}
+            - --enableClusterWideControllers=true
+            - --enableNodeSpecificControllers=false
+          ports:
+            - name: metrics
+              containerPort: 9974
+            - name: healthz
+              containerPort: 9335
+          probes:
+            liveness:
+              enabled: true
+              port: healthz
+              path: /healthz
+              spec:
+                initialDelaySeconds: 15
+                periodSeconds: 20
+            readiness:
+              enabled: true
+              port: healthz
+              path: /readyz
+              spec:
+                initialDelaySeconds: 5
+                periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+    node:
+      type: daemonset
+      serviceAccount:
+        identifier: node
+      pod:
+        hostNetwork: true
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          seccompProfile:
+            type: RuntimeDefault
+        nodeSelector:
+          kubernetes.io/os: linux
+        tolerations:
+          # The node-specific operator should generally be allowed to run even if a node is tainted. Without it,
+          # the node's network configuration cannot be managed, which could result in the primary CNI not
+          # functioning properly on that node.
+          - operator: Exists
+      containers:
+        node-network-operator:
+          image:
+            repository: ghcr.io/soliddowant/node-network-operator
+            tag: "{{ .Chart.AppVersion }}"
+          args:
+            - --metrics-bind-address=:9973
+            - --health-probe-bind-address=127.0.0.1:9334
+            - --enableClusterWideControllers=false
+            - --enableNodeSpecificControllers=true
+            # This should be set via the downward API in the deployment spec below.
+            - --node-name=$(NODE_NAME)
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: metrics
+              containerPort: 9973
+            - name: healthz
+              containerPort: 9334
+          probes:
+            liveness:
+              enabled: true
+              port: healthz
+              path: /healthz
+              spec:
+                initialDelaySeconds: 15
+                periodSeconds: 20
+            readiness:
+              enabled: true
+              port: healthz
+              path: /readyz
+              spec:
+                initialDelaySeconds: 5
+                periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                # Add the capability for netlink access
+                - NET_ADMIN
+            seccompProfile:
+              type: RuntimeDefault
+  persistence:
+    webhook-server-cert:
+      enabled: "{{ .Values.config.webhook.enableTLS }}"
+      type: secret
+      name: node-network-operator-webhook-serving-certs
+      defaultMode: 0440
+      advancedMounts:
+        cluster:
+          node-network-operator:
+            - path: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+  service:
+    webhook:
+      controller: cluster
+      ports:
+        webhook:
+          port: 9443
+    cluster-metrics:
+      controller: cluster
+      ports:
+        metrics:
+          port: 9974
+    node-metrics:
+      controller: node
+      ports:
+        metrics:
+          port: 9973
+  serviceMonitor:
+    cluster:
+      service:
+        identifier: cluster-metrics
+      endpoints:
+        - port: metrics
+    node:
+      service:
+        identifier: node-metrics
+      endpoints:
+        - port: metrics
+  serviceAccount:
+    cluster: {}
+    node: {}
+  rbac:
+    roles:
+      election:
+        enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
+        type: Role
+        rules:
+          - apiGroups:
+              - coordination.k8s.io
+            resources:
+              - leases
+            verbs:
+              - create
+              - update
+              - get
+          # Needed to omit events related to leader election
+          - apiGroups:
+              - ""
+            resources:
+              - events
+            verbs:
+              - create
+              - patch
+      cluster:
+        type: ClusterRole
+        rules:
+          - apiGroups:
+              - ""
+            resources:
+              - events
+            verbs:
+              - create
+              - patch
+          - apiGroups:
+              - ""
+            resources:
+              - nodes
+            verbs:
+              - get
+              - list
+              - watch
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - links
+            verbs:
+              - list
+              - watch
+              - create
+              - update
+              - patch
+              - delete
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - links/status
+            verbs:
+              - get
+              - update
+              - patch
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - links/finalizers
+            verbs:
+              - update
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - nodelinks
+            verbs:
+              - get
+              - list
+              - watch
+              - create
+              - patch
+              - delete
+      node:
+        type: ClusterRole
+        rules:
+          - apiGroups:
+              - ""
+            resources:
+              - events
+            verbs:
+              - create
+              - patch
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - nodelinks
+            verbs:
+              - get
+              - list
+              - watch
+              - patch
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - nodelinks/status
+            verbs:
+              - get
+              - update
+              - patch
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - nodelinks/finalizers
+            verbs:
+              - create
+              - patch
+    bindings:
+      election:
+        enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
+        type: RoleBinding
+        roleRef:
+          identifier: election
+        subjects:
+          - identifier: cluster
+      cluster:
+        type: ClusterRoleBinding
+        roleRef:
+          identifier: cluster
+        subjects:
+          - identifier: cluster
+      node:
+        type: ClusterRoleBinding
+        roleRef:
+          identifier: node
+        subjects:
+          - identifier: node
+  rawResources:
+    webhook-certificate:
+      enabled: "{{ .Values.config.webhook.enableTLS }}"
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      spec:
+        spec:
+          dnsNames:
+            - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}'
+            - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc'
+            - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc.{{ .Values.config.clusterDomain }}'
+          issuerRef:
+            kind: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.kind }}{{- end -}}"
+            name: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.name }}{{- end -}}"
+    validating-webhook-tls:
+      enabled: "{{ .Values.config.webhook.enableTLS }}"
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingWebhookConfiguration
+      annotations:
+        cert-manager.io/inject-ca-from: '{{ .Release.Namespace }}/{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
+      spec: &validating_webhook_spec
+        webhooks:
+          - admissionReviewVersions:
+              - v1
+            clientConfig:
+              service:
+                name: '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}'
+                namespace: "{{ .Release.Namespace }}"
+                path: /validate-nodenetworkoperator-soliddowant-dev-v1alpha1-link
+            failurePolicy: Fail
+            name: vlink-v1alpha1.kb.io
+            rules:
+              - apiGroups:
+                  - nodenetworkoperator.soliddowant.dev
+                apiVersions:
+                  - v1alpha1
+                operations:
+                  - CREATE
+                  - UPDATE
+                resources:
+                  - links
+            sideEffects: None
+    validating-webhook:
+      enabled: "{{ not .Values.config.webhook.enableTLS }}"
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingWebhookConfiguration
+      spec:
+        <<: *validating_webhook_spec
+    cluster-pdb:
+      enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      spec:
+        minAvailable: 1
+        unhealthyPodEvictionPolicy: AlwaysAllow
+        selector:
+          matchLabels:
+            app.kubernetes.io/instance: "{{ .Release.Name }}"
+            app.kubernetes.io/name: '{{ include "bjw-s.common.lib.chart.names.name" . }}'
+            app.kubernetes.io/controller: cluster

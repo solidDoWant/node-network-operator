@@ -1,0 +1,61 @@
+---
+{{/* Helm is missing this basic, fundemental function. */}}
+{{/* I'd file a PR for it, but the last similar ~10 line PR I filed took 18 months to get merged and released. Not doing that again. */}}
+{{- define "strToBool" -}}
+    {{- $output := "" -}}
+    {{- if or (eq . "true") (eq . "yes") (eq . "on") -}}
+        {{- true -}}
+    {{- else if or (eq . "false") (eq . "no") (eq . "off") -}}
+        {{- false -}}
+    {{- else -}}
+        {{- fail (printf "Invalid boolean value: %s (must be true/false, yes/no, or on/off)" .) -}}
+    {{- end -}}
+{{- end -}}
+
+{{/* Template config values that the library doesn't */}}
+{{- $clusterController := index .Values "resources" "controllers" "cluster" -}}
+{{- $_ := set $clusterController "replicas" (tpl (index $clusterController "replicas") .) -}}
+{{- $clusterControllerPod := index $clusterController "pod" -}}
+{{- $_ := set $clusterControllerPod "hostNetwork" (tpl (index $clusterControllerPod "hostNetwork") . | include "strToBool" | eq "true") -}}
+
+{{- range $controllerName, $controllerConfig := index .Values "resources" "controllers" -}}
+    {{- range $containerName, $containerConfig := index $controllerConfig "containers" -}}
+    {{- $args := index $containerConfig "args" -}}
+    {{- $templatedArgs := list -}}
+    {{- range $index, $arg := $args -}}
+        {{- $templatedArgs = append $templatedArgs (tpl $arg $) -}}
+    {{- end -}}
+    {{- $_ := set $containerConfig "args" $templatedArgs -}}
+    {{- end -}}
+{{- end -}}
+
+{{- $webhookServerCertVolume := index .Values "resources" "persistence" "webhook-server-cert" -}}
+{{- $_ := set $webhookServerCertVolume "enabled" (tpl (index $webhookServerCertVolume "enabled") . | include "strToBool" | eq "true") -}}
+
+{{- range $rawResourceName, $rawResourceConfig := index .Values "resources" "rawResources" -}}
+    {{- if hasKey $rawResourceConfig "enabled" -}}
+        {{- $_ := set $rawResourceConfig "enabled" (tpl (index $rawResourceConfig "enabled") $ | include "strToBool" | eq "true") -}}
+    {{- end -}}
+{{- end -}}
+
+{{- range $rbacRoleName, $rbacRoleConfig := index .Values "resources" "rbac" "roles" -}}
+    {{- if hasKey $rbacRoleConfig "enabled" -}}
+        {{- $_ := set $rbacRoleConfig "enabled" (tpl (index $rbacRoleConfig "enabled") $ | include "strToBool" | eq "true") -}}
+    {{- end -}}
+{{- end -}}
+
+{{- range $rbacRoleBindingName, $rbacRoleBindingConfig := index .Values "resources" "rbac" "bindings" -}}
+    {{- if hasKey $rbacRoleBindingConfig "enabled" -}}
+        {{- $_ := set $rbacRoleBindingConfig "enabled" (tpl (index $rbacRoleBindingConfig "enabled") $ | include "strToBool" | eq "true") -}}
+    {{- end -}}
+{{- end -}}
+
+{{/* Merge all the values into the format that the common library expects */}}
+{{- $mergedValues := mustDeepCopy .Values -}}
+{{- $mergedValues = omit $mergedValues "resources" -}}
+{{- $mergedValues = mustMergeOverwrite $mergedValues (mustDeepCopy .Values.resources) -}}
+{{- $_ := set . "Values" $mergedValues }}
+
+{{/* Hand off to the common library for validation, templating, and rendering */}}
+{{- include "bjw-s.common.loader.init" . }}
+{{ include "bjw-s.common.loader.generate" . }}
