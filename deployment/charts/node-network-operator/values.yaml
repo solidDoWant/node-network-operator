@@ -54,7 +54,10 @@ resources:
             repository: "{{ .Values.config.image.repository }}"
             tag: "{{ tpl .Values.config.image.tag . }}"
           args:
+            # I haven't added secure metrics support to the chart yet, because I personally don't use it. If you need it,
+            # please open an issue or PR. The operator supports it, it's just not exposed via the chart yet.
             - --metrics-bind-address=:9974
+            - --metrics-secure=false
             - --health-probe-bind-address={{- if .Values.config.noRequireCNI -}}127.0.0.1{{- end -}}:9335
             - --leader-elect={{ .Values.config.clusterController.replicas | int | lt 1 }}
             - --webhook-cert-path={{ if .Values.config.webhook.enableTLS -}}/tmp/k8s-webhook-server/serving-certs{{- else -}}""{{ end }}
@@ -103,9 +106,10 @@ resources:
       pod:
         hostNetwork: true
         securityContext:
-          runAsUser: 1000
-          runAsGroup: 1000
-
+          # KIND seems to require UID 0 _specifically_, when attempting to manipulate network interfaces.
+          # I will reduce this to a non-root user if it works in my non-KIND environment.
+          runAsUser: 0
+          runAsGroup: 0
           seccompProfile:
             type: RuntimeDefault
         nodeSelector:
@@ -122,6 +126,7 @@ resources:
             tag: "{{ tpl .Values.config.image.tag . }}"
           args:
             - --metrics-bind-address=:9973
+            - --metrics-secure=false
             - --health-probe-bind-address=127.0.0.1:9334
             - --enable-cluster-wide-controllers=false
             - --enable-node-specific-controllers=true
@@ -161,7 +166,7 @@ resources:
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false
-            runAsNonRoot: true
+            runAsNonRoot: false
             readOnlyRootFilesystem: true
             capabilities:
               drop:
@@ -187,14 +192,19 @@ resources:
       controller: cluster
       ports:
         webhook:
-          port: 9443
+          port: 443
+          targetPort: 9443
     cluster-metrics:
       controller: cluster
+      labels:
+        app.kubernetes.io/component: metrics
       ports:
         metrics:
           port: 9974
     node-metrics:
       controller: node
+      labels:
+        app.kubernetes.io/component: metrics
       ports:
         metrics:
           port: 9973
@@ -322,6 +332,12 @@ resources:
             verbs:
               - create
               - patch
+          - apiGroups:
+              - nodenetworkoperator.soliddowant.dev
+            resources:
+              - links
+            verbs:
+              - list
     bindings:
       election:
         enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
@@ -357,8 +373,9 @@ resources:
           issuerRef:
             kind: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.kind }}{{- end -}}"
             name: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.name }}{{- end -}}"
-    validating-webhook-tls:
+    validating-webhook-configuration-tls:
       enabled: "{{ .Values.config.webhook.enableTLS }}"
+      forceRename: '{{ (include "bjw-s.common.lib.chart.names.fullname" .) }}-validating-webhook-configuration'
       apiVersion: admissionregistration.k8s.io/v1
       kind: ValidatingWebhookConfiguration
       annotations:
@@ -385,7 +402,7 @@ resources:
                 resources:
                   - links
             sideEffects: None
-    validating-webhook:
+    validating-webhook-configuration:
       enabled: "{{ not .Values.config.webhook.enableTLS }}"
       apiVersion: admissionregistration.k8s.io/v1
       kind: ValidatingWebhookConfiguration
