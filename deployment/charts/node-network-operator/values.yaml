@@ -199,14 +199,14 @@ resources:
       labels:
         app.kubernetes.io/component: metrics
       ports:
-        metrics:
+        http-metrics:
           port: 9974
     node-metrics:
       controller: node
       labels:
         app.kubernetes.io/component: metrics
       ports:
-        metrics:
+        http-metrics:
           port: 9973
   serviceMonitor:
     cluster:

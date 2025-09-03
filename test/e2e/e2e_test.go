@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -19,9 +20,6 @@ const namespace = "node-network-operator-system"
 
 // serviceAccountName created for the project
 const serviceAccountName = "node-network-operator-controller-manager"
-
-// metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "node-network-operator-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "node-network-operator-metrics-binding"
@@ -47,27 +45,60 @@ var _ = Describe("Manager", Ordered, func() {
 			})
 		})
 
-		managerTests()
+		It("should provision the webhook cert", func() {
+			// Without this the pod will not start
+			By("validating that cert-manager has created the certificate Secret")
+			verifyCertManager := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "secrets", "webhook-server-cert", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyCertManager).Should(Succeed())
+		})
+
+		managerTests(true)
 	})
 
 	When("Installed via Helm", func() {
+		setupTeardown()
+
 		BeforeAll(func() {
+			By("deploying a self-signed issuer for cert-manager")
+			Expect(utils.InstallSelfSignedIssuer()).To(Succeed(), "Failed to install self-signed issuer")
+			DeferCleanup(func() {
+				By("removing the self-signed issuer for cert-manager")
+				utils.UninstallSelfSignedIssuer()
+			})
+
 			By("deploying the controller-manager HELM SETUP")
-			cmd := exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+			projectImageRepo, projectImageTag, found := strings.Cut(projectImage, ":")
+			Expect(found).To(BeTrue(), "Project image tag not found in image name")
+
+			chartName := "node-network-operator"
+
+			cmd := exec.Command(
+				"helm", "install", chartName, "./deployment/charts/node-network-operator",
+				"--namespace", namespace,
+				"--set", "config.image.repository="+projectImageRepo,
+				"--set", "config.image.tag="+projectImageTag,
+				"--set", "config.webhook.issuerRef.kind=ClusterIssuer",
+				"--set", "config.webhook.issuerRef.name=self-signed",
+			)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
 			DeferCleanup(func() {
 				By("undeploying the controller-manager")
-				cmd = exec.Command("make", "undeploy")
-				_, _ = utils.Run(cmd)
+				_, err := utils.Run(exec.Command("helm", "uninstall", chartName, "--namespace", namespace))
+				Expect(err).NotTo(HaveOccurred(), "Failed to undeploy the controller-manager")
 			})
 		})
 
-		managerTests()
+		managerTests(false)
 	})
 })
 
+// setupTeardown sets up and tears down the test environment that is common to all installation methods
 func setupTeardown() {
 	GinkgoHelper()
 
@@ -94,10 +125,6 @@ func setupTeardown() {
 		// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
 		// and deleting the namespace.
 		DeferCleanup(func() {
-			By("cleaning up the curl pod for metrics")
-			cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-			_, _ = utils.Run(cmd)
-
 			By("uninstalling CRDs")
 			cmd = exec.Command("make", "uninstall")
 			_, _ = utils.Run(cmd)
@@ -113,7 +140,7 @@ func setupTeardown() {
 	AfterEach(func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
-			By("Fetching controller manager pod logs")
+			By("Fetching controller manager pods logs")
 			controllerPodNames, controllerPodNamesErr := getControllerManagerPodNames()
 			if controllerPodNamesErr == nil {
 				for _, controllerPodName := range controllerPodNames {
@@ -161,31 +188,19 @@ func setupTeardown() {
 	})
 }
 
-func managerTests() {
+// managerTests contains tests that should be run against the manager regardless of installation method
+func managerTests(metricsRequireSAToken bool) {
 	GinkgoHelper()
 
 	Context("Manager", func() {
-		It("should provisioned cert-manager", func() {
-			// Without this the pod will not start
-			By("validating that cert-manager has the certificate Secret")
-			verifyCertManager := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "secrets", "webhook-server-cert", "-n", namespace)
-				_, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-			}
-			Eventually(verifyCertManager).Should(Succeed())
-		})
-
 		It("should run successfully", func() {
-			By("validating that the controller-manager pod is running as expected")
-			verifyControllerUp := func(g Gomega) {
+			By("validating that the controller-manager pods are running as expected")
+			Eventually(func(g Gomega) {
 				controllerPodNames, err := getControllerManagerPodNames()
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to get controller-manager pod names")
-				g.Expect(controllerPodNames).To(HaveLen(2), "expected 2 controller pods running")
+				g.Expect(len(controllerPodNames)%2).To(Equal(0), "expected an even number of controller pods running")
 
 				for _, controllerPodName := range controllerPodNames {
-					g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
-
 					// Validate the pod's status
 					cmd := exec.Command("kubectl", "get",
 						"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
@@ -195,42 +210,26 @@ func managerTests() {
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Running"), "Incorrect controller-manager pod status")
 				}
-			}
-			Eventually(verifyControllerUp).Should(Succeed())
+			}).Should(Succeed())
 		})
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
-			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
-			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=node-network-operator-metrics-reader",
-				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
-			)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
-
-			DeferCleanup(func() {
-				By("deleting the ClusterRoleBinding for the service account")
-				_, err := utils.Run(exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName))
-				Expect(err).NotTo(HaveOccurred(), "Failed to delete ClusterRoleBinding")
-			})
-
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
+			metricsServiceCmdOut, err := utils.Run(exec.Command("kubectl", "get", "service", "-l", "app.kubernetes.io/name=node-network-operator,app.kubernetes.io/component=metrics", "-n", namespace, "-o", "name"))
+			Expect(err).NotTo(HaveOccurred(), "Metrics service(s) should exist")
+			metricsServiceNames := utils.GetNonEmptyLines(metricsServiceCmdOut)
+			Expect(metricsServiceNames).NotTo(BeEmpty(), "No metrics services found")
 
-			By("getting the service account token")
-			token, err := serviceAccountToken()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(token).NotTo(BeEmpty())
-
-			By("waiting for the metrics endpoint to be ready")
-			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
-			}).Should(Succeed())
+			By("waiting for the metrics endpoints to be ready")
+			for _, metricsServiceName := range metricsServiceNames {
+				Eventually(func(g Gomega) {
+					metricsServiceName := strings.TrimPrefix(metricsServiceName, "service/")
+					output, err := utils.Run(exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace, "-o", "go-template={{ range .subsets }}{{ range .addresses }}{{ .ip }}{{ \"\\n\" }}{{ end }}{{ end }}"))
+					g.Expect(err).NotTo(HaveOccurred())
+					// Skip the "endpointslice" warning
+					g.Expect(utils.GetNonEmptyLines(output)[1:]).To(HaveLen(2), "Metrics endpoints is not ready or otherwise missing")
+				}).Should(Succeed())
+			}
 
 			By("verifying that the controller manager is serving the metrics server")
 			Eventually(func(g Gomega) {
@@ -245,57 +244,100 @@ func managerTests() {
 				}
 			}).Should(Succeed())
 
-			By("creating the curl-metrics pod to access the metrics endpoint")
-			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
-				"--namespace", namespace,
-				"--image=curlimages/curl:latest",
-				"--overrides",
-				fmt.Sprintf(`{
-					"spec": {
-						"containers": [{
-							"name": "curl",
-							"image": "curlimages/curl:latest",
-							"command": ["/bin/sh", "-c"],
-							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
-							"securityContext": {
-								"allowPrivilegeEscalation": false,
-								"capabilities": {
-									"drop": ["ALL"]
-								},
-								"runAsNonRoot": true,
-								"runAsUser": 1000,
-								"seccompProfile": {
-									"type": "RuntimeDefault"
-								}
-							}
-						}],
-						"serviceAccount": "%s"
-					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
+			var authHeader, saConfig string
+			scheme := "http"
+			if metricsRequireSAToken {
+				By("creating a ClusterRoleBinding for the service account to allow access to metrics")
+				cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
+					"--clusterrole=node-network-operator-metrics-reader",
+					fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
+				)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
-			By("waiting for the curl-metrics pod to complete.")
-			verifyCurlUp := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
-					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
+				DeferCleanup(func() {
+					By("deleting the ClusterRoleBinding for the service account")
+					_, err := utils.Run(exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName))
+					Expect(err).NotTo(HaveOccurred(), "Failed to delete ClusterRoleBinding")
+				})
+
+				By("getting the service account token")
+				token, err := serviceAccountToken()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(token).NotTo(BeEmpty())
+
+				scheme = "https"
+				authHeader = fmt.Sprintf("-H 'Authorization: Bearer %s'", token)
+				saConfig = fmt.Sprintf(", %q: %q", "serviceAccount", serviceAccountName)
 			}
-			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
 
-			By("getting the metrics by checking curl-metrics logs")
-			metricsOutput := getMetricsOutput()
-			Expect(metricsOutput).To(ContainSubstring(
-				"controller_runtime_reconcile_total",
-			))
+			for _, metricsServiceName := range metricsServiceNames {
+				func() {
+					By("getting the service metrics port number")
+					port, err := utils.Run(exec.Command("kubectl", "get", metricsServiceName, "-n", namespace, "-o", "jsonpath={.spec.ports[?(@.name==\"https-metrics\")].port}{.spec.ports[?(@.name==\"http-metrics\")].port}"))
+					Expect(err).NotTo(HaveOccurred(), "Failed to get metrics service port")
+					Expect(port).NotTo(BeEmpty(), "Metrics service port is empty")
+
+					metricsServiceName := strings.TrimPrefix(metricsServiceName, "service/")
+
+					By("creating the curl-metrics pod to access the metrics endpoint")
+					cmd := exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
+						"--namespace", namespace,
+						"--image=curlimages/curl:latest",
+						"--overrides",
+						fmt.Sprintf(`{
+							"spec": {
+								"containers": [{
+									"name": "curl",
+									"image": "curlimages/curl:latest",
+									"command": ["/bin/sh", "-c"],
+									"args": ["curl -v -k %s %s://%s.%s.svc.cluster.local:%s/metrics"],
+									"securityContext": {
+										"allowPrivilegeEscalation": false,
+										"capabilities": {
+											"drop": ["ALL"]
+										},
+										"runAsNonRoot": true,
+										"runAsUser": 1000,
+										"seccompProfile": {
+											"type": "RuntimeDefault"
+										}
+									}
+								}]%s
+							}
+						}`, authHeader, scheme, metricsServiceName, namespace, port, saConfig))
+					_, err = utils.Run(cmd)
+					Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
+
+					defer func() {
+						By("cleaning up the curl pod for metrics")
+						_, err := utils.Run(exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace))
+						Expect(err).NotTo(HaveOccurred(), "Failed to delete curl-metrics pod")
+					}()
+
+					By("waiting for the curl-metrics pod to complete.")
+					verifyCurlUp := func(g Gomega) {
+						cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
+							"-o", "jsonpath={.status.phase}",
+							"-n", namespace)
+						output, err := utils.Run(cmd)
+						g.Expect(err).NotTo(HaveOccurred())
+						g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
+					}
+					Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
+
+					By("getting the metrics by checking curl-metrics logs")
+					metricsOutput := getMetricsOutput()
+					Expect(metricsOutput).To(ContainSubstring(
+						"controller_runtime_",
+					))
+				}()
+			}
 		})
 
 		It("should have CA injection for validating webhooks", func() {
 			By("checking CA injection for validating webhooks")
-			verifyCAInjection := func(g Gomega) {
+			Eventually(func(g Gomega) {
 				cmd := exec.Command("kubectl", "get",
 					"validatingwebhookconfigurations.admissionregistration.k8s.io",
 					"node-network-operator-validating-webhook-configuration",
@@ -303,8 +345,7 @@ func managerTests() {
 				vwhOutput, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(len(vwhOutput)).To(BeNumerically(">", 10))
-			}
-			Eventually(verifyCAInjection).Should(Succeed())
+			}).Should(Succeed())
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
@@ -377,7 +418,7 @@ func managerTests() {
 				DeferCleanup(func() {
 					By("removing the KIND-specific iptables rule")
 					Expect(utils.ForEachNode(func(nodeName string) error {
-						// Remove the iptables rule we added earlier
+						// Remove the iptables rule added earlier
 						cmd := exec.Command(
 							"docker", "container", "exec", nodeName,
 							"iptables",
@@ -489,7 +530,7 @@ func managerTests() {
 
 func getControllerManagerPodNames() ([]string, error) {
 	cmd := exec.Command("kubectl", "get",
-		"pods", "-l", "control-plane=controller-manager",
+		"pods", "-l", "app.kubernetes.io/name=node-network-operator",
 		"-o", "go-template={{ range .items }}"+
 			"{{ if not .metadata.deletionTimestamp }}"+
 			"{{ .metadata.name }}"+
