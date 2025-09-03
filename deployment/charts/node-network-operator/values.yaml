@@ -34,6 +34,8 @@ resources:
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000
+          fsGroup: 1000
+          fsGroupChangePolicy: OnRootMismatch
           seccompProfile:
             type: RuntimeDefault
         nodeSelector:
@@ -53,7 +55,7 @@ resources:
             tag: "{{ tpl .Values.config.image.tag . }}"
           args:
             - --metrics-bind-address=:9974
-            - --health-probe-bind-address=127.0.0.1:9335
+            - --health-probe-bind-address={{- if .Values.config.noRequireCNI -}}127.0.0.1{{- end -}}:9335
             - --leader-elect={{ .Values.config.clusterController.replicas | int | lt 1 }}
             - --webhook-cert-path={{ if .Values.config.webhook.enableTLS -}}/tmp/k8s-webhook-server/serving-certs{{- else -}}""{{ end }}
             - --enable-cluster-wide-controllers=true
@@ -69,7 +71,7 @@ resources:
               custom: true
               spec:
                 httpGet:
-                  host: 127.0.0.1
+                  host: "{{- if .Values.config.noRequireCNI -}}127.0.0.1{{- end -}}"
                   port: healthz
                   path: /healthz
                 initialDelaySeconds: 15
@@ -79,7 +81,7 @@ resources:
               custom: true
               spec:
                 httpGet:
-                  host: 127.0.0.1
+                  host: "{{- if .Values.config.noRequireCNI -}}127.0.0.1{{- end -}}"
                   port: healthz
                   path: /readyz
                 initialDelaySeconds: 15
@@ -87,6 +89,8 @@ resources:
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -101,6 +105,7 @@ resources:
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000
+
           seccompProfile:
             type: RuntimeDefault
         nodeSelector:
@@ -156,6 +161,8 @@ resources:
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
