@@ -225,6 +225,21 @@ build: manifests generate fmt vet schemas $(LOCAL_BUILDERS) ## Builds all local 
 .PHONY: build-all
 build-all: $(ALL_BUILDERS)	## Builds all outputs for all supported platforms (binaries, tarballs, licenses, etc.).
 
+RELEASE_DIR = $(BUILD_DIR)/releases/$(VERSION)
+
+PHONY += release
+release: TAG = v$(VERSION)
+release: CP_CMDS = $(foreach PLATFORM,$(BINARY_PLATFORMS),cp $(TARBALL_DIR)/$(PLATFORM)/$(BINARY_NAME).tar.gz $(RELEASE_DIR)/$(BINARY_NAME)-$(VERSION)-$(subst /,-,$(PLATFORM)).tar.gz &&) true
+release: SAFETY_PREFIX = $(if $(findstring t,$(PUSH_ALL)),,echo)
+release: build-all	## Create a GitHub release including all tarballs for all supported platforms. Requires the GitHub CLI (gh).
+	@mkdir -p $(RELEASE_DIR)
+	@gh auth status
+	@$(CP_CMDS)
+	@$(SAFETY_PREFIX) git tag -a $(TAG) -m "Release $(TAG)"
+	@$(SAFETY_PREFIX) git push origin
+	@$(SAFETY_PREFIX) git push origin --tags
+	@$(SAFETY_PREFIX) gh release create $(TAG) --generate-notes --latest --verify-tag "$(RELEASE_DIR)"/*
+
 .PHONY: clean
 clean:	## Clean up all build artifacts.
 	@rm -rf $(BUILD_DIR) $(WORKING_DIR) $(HELM_CHART_DIR)/charts
