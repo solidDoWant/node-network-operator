@@ -3,9 +3,11 @@ config:
   # Enable TLS on the webhook endpoints. This requires cert-manager to be installed in the cluster.
   webhook:
     enableTLS: true
+    # This must be set when `enableTLS` is true. This should refer to a cert-manager Issuer or ClusterIssuer that can
+    # issue certificates for the webhook service.
     issuerRef:
-      kind: Issuer
-      name: selfsigned-issuer
+      kind: ""
+      name: ""
   # Set this to true if the operator should manage network configurations PRIOR to the setup of the primary CNI.
   # Let me know if you're doing this - I'd like to know how I can improve the operator to better support this use case.
   noRequireCNI: false
