@@ -41,6 +41,12 @@ var (
 	// isCNIPluginsAlreadyInstalled will be set true when basic CNI plugins DaemonSet be found on the cluster
 	isCNIPluginsAlreadyInstalled = false
 
+	// These variables are useful if the prometheus operator is already installed, avoiding
+	// re-installation and conflicts.
+	skipPrometheusInstall = os.Getenv("PROMETHEUS_INSTALL_SKIP") == "true"
+	// isPrometheusAlreadyInstalled will be set true when Prometheus CRDs be found on the cluster
+	isPrometheusAlreadyInstalled = false
+
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
 	projectImage = "ghcr.io/soliddowant/node-network-operator:v0.0.1"
@@ -124,9 +130,26 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: basic CNI plugins are already installed. Skipping installation...\n")
 		}
 	}
+
+	if !skipPrometheusInstall {
+		By("checking if prometheus operator is installed already")
+		isPrometheusAlreadyInstalled = utils.IsPrometheusCRDsInstalled()
+		if !isPrometheusAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Prometheus Operator...\n")
+			Expect(utils.InstallPrometheusOperator()).To(Succeed(), "Failed to install Prometheus Operator")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Prometheus Operator is already installed. Skipping installation...\n")
+		}
+	}
 })
 
 var _ = AfterSuite(func() {
+	// Teardown prometheus operator after the suite if not skipped and if it was not already installed
+	if !skipPrometheusInstall && !isPrometheusAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Prometheus Operator...\n")
+		utils.UninstallPrometheusOperator()
+	}
+
 	// Teardown basic CNI plugins after the suite if not skipped and if it was not already installed
 	if !skipCNIPluginsInstall && !isCNIPluginsAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling basic CNI plugins...\n")
