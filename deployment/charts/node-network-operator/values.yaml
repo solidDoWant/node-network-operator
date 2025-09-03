@@ -54,8 +54,8 @@ resources:
             - --health-probe-bind-address=127.0.0.1:9335
             - --leader-elect={{ .Values.config.clusterController.replicas | int | lt 1 }}
             - --webhook-cert-path={{ if .Values.config.webhook.enableTLS -}}/tmp/k8s-webhook-server/serving-certs{{- else -}}""{{ end }}
-            - --enableClusterWideControllers=true
-            - --enableNodeSpecificControllers=false
+            - --enable-cluster-wide-controllers=true
+            - --enable-node-specific-controllers=false
           ports:
             - name: metrics
               containerPort: 9974
@@ -64,18 +64,24 @@ resources:
           probes:
             liveness:
               enabled: true
-              port: healthz
-              path: /healthz
+              custom: true
               spec:
+                httpGet:
+                  host: 127.0.0.1
+                  port: healthz
+                  path: /healthz
                 initialDelaySeconds: 15
                 periodSeconds: 20
             readiness:
               enabled: true
-              port: healthz
-              path: /readyz
+              custom: true
               spec:
-                initialDelaySeconds: 5
-                periodSeconds: 10
+                httpGet:
+                  host: 127.0.0.1
+                  port: healthz
+                  path: /readyz
+                initialDelaySeconds: 15
+                periodSeconds: 20
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false
@@ -110,8 +116,8 @@ resources:
           args:
             - --metrics-bind-address=:9973
             - --health-probe-bind-address=127.0.0.1:9334
-            - --enableClusterWideControllers=false
-            - --enableNodeSpecificControllers=true
+            - --enable-cluster-wide-controllers=false
+            - --enable-node-specific-controllers=true
             # This should be set via the downward API in the deployment spec below.
             - --node-name=$(NODE_NAME)
           env:
@@ -127,18 +133,24 @@ resources:
           probes:
             liveness:
               enabled: true
-              port: healthz
-              path: /healthz
+              custom: true
               spec:
+                httpGet:
+                  host: 127.0.0.1
+                  port: healthz
+                  path: /healthz
                 initialDelaySeconds: 15
                 periodSeconds: 20
             readiness:
               enabled: true
-              port: healthz
-              path: /readyz
+              custom: true
               spec:
-                initialDelaySeconds: 5
-                periodSeconds: 10
+                httpGet:
+                  host: 127.0.0.1
+                  port: healthz
+                  path: /readyz
+                initialDelaySeconds: 15
+                periodSeconds: 20
           securityContext:
             allowPrivilegeEscalation: false
             privileged: false
