@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -55,7 +53,6 @@ func NewNodeLinksReconciler(cluster cluster.Cluster, nodeName string) *NodeLinks
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/finalizers,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=list
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -939,38 +936,6 @@ func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return object.GetName() == r.nodeName
 				}),
 			),
-		).
-		// Watch for changes to Link resources and enqueue the NodeLinks selected by the Link's node selector
-		Watches(
-			&nodenetworkoperatorv1alpha1.Link{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				link, ok := obj.(*nodenetworkoperatorv1alpha1.Link)
-				if !ok {
-					logf.FromContext(ctx).Error(fmt.Errorf("unexpected object type: %T", obj), "failed to map Link to NodeLinks")
-					return nil
-				}
-
-				selector, err := metav1.LabelSelectorAsSelector(&link.Spec.NodeSelector)
-				if err != nil {
-					return nil
-				}
-
-				var nodes corev1.NodeList
-				if err := r.List(ctx, &nodes, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-					logf.FromContext(ctx).Error(err, "failed to list Nodes matched by Link", "link", link.Name)
-					return nil
-				}
-
-				return pie.Map(nodes.Items, func(node corev1.Node) reconcile.Request {
-					return reconcile.Request{
-						NamespacedName: client.ObjectKey{
-							// NodeLinks resources are cluster namespaced and named after the node that
-							// they are associated with.
-							Name: node.Name,
-						},
-					}
-				})
-			}),
 		).
 		Named("nodelinks").
 		WithOptions(controller.TypedOptions[reconcile.Request]{
