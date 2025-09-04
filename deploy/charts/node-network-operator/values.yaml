@@ -32,6 +32,7 @@ resources:
     cluster:
       type: deployment
       replicas: "{{ .Values.config.clusterController.replicas }}"
+      strategy: RollingUpdate
       serviceAccount:
         identifier: cluster
       pod:
