@@ -422,6 +422,7 @@ resources:
         <<: *validating_webhook_spec
     cluster-pdb:
       enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
+      forceRename: '{{ (include "bjw-s.common.lib.chart.names.fullname" .) }}-cluster'
       apiVersion: policy/v1
       kind: PodDisruptionBudget
       spec:
