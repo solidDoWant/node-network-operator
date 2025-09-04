@@ -195,10 +195,8 @@ func getFirstFoundEnvTestBinaryDir() string {
 	return ""
 }
 
-// vet: ginko-netns-check
 // withTestNetworkNamespace wraps a function to run in a specific network namespace.
 func withTestNetworkNamespace(ctx context.Context, f func(context.Context)) {
-	defer GinkgoRecover()
 	// Important: namespaces are per "thread", which are basically just Linux processes. The current
 	// execution context must be locked to a thread so that all statements run in the same namespace.
 	// The thread is never unlocked, causing it to be thrown away when the goroutine completes. This
