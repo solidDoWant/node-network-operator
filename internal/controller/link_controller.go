@@ -398,13 +398,26 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return nil
 				}
 
-				return []reconcile.Request{
-					{
-						NamespacedName: client.ObjectKey{
-							Name: node.GetName(),
-						},
-					},
+				// When labels change, a node is added, or a node is removed, the reconciler must re-evaluate
+				// all Link resources to see if the node now matches or no longer matches any Link's node selector.
+				// This is potentially expensive, but there is no other way to ensure that the node's matching state
+				// is always correct.
+
+				// Enqueue all Link resources for reconciliation
+				var links nodenetworkoperatorv1alpha1.LinkList
+				if err := r.List(ctx, &links); err != nil {
+					logf.FromContext(ctx).Error(err, "failed to list Link resources while processing node change")
+					return nil
 				}
+
+				// Create a reconcile request for each Link resource
+				return pie.Map(links.Items, func(link nodenetworkoperatorv1alpha1.Link) reconcile.Request {
+					return reconcile.Request{
+						NamespacedName: client.ObjectKey{
+							Name: link.Name,
+						},
+					}
+				})
 			}),
 			builder.WithPredicates(
 				// Trigger on any change that would affect what the node selector matches.
@@ -424,7 +437,7 @@ func (r *LinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		).
-		// Watch NodeLinks pending deletion, and reconcile matching bridges so that their status fields are updated
+		// Watch NodeLinks pending deletion, and reconcile matching links so that their status fields are updated
 		Watches(
 			&nodenetworkoperatorv1alpha1.NodeLinks{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
