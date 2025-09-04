@@ -88,7 +88,7 @@ resources:
                   host: "{{- if .Values.config.noRequireCNI -}}127.0.0.1{{- end -}}"
                   port: healthz
                   path: /healthz
-                initialDelaySeconds: 15
+                initialDelaySeconds: 3
                 periodSeconds: 20
             readiness:
               enabled: true
@@ -98,7 +98,7 @@ resources:
                   host: "{{- if .Values.config.noRequireCNI -}}127.0.0.1{{- end -}}"
                   port: healthz
                   path: /readyz
-                initialDelaySeconds: 15
+                initialDelaySeconds: 3
                 periodSeconds: 20
           securityContext:
             allowPrivilegeEscalation: false
@@ -162,7 +162,7 @@ resources:
                   host: 127.0.0.1
                   port: healthz
                   path: /healthz
-                initialDelaySeconds: 15
+                initialDelaySeconds: 3
                 periodSeconds: 20
             readiness:
               enabled: true
@@ -172,7 +172,7 @@ resources:
                   host: 127.0.0.1
                   port: healthz
                   path: /readyz
-                initialDelaySeconds: 15
+                initialDelaySeconds: 3
                 periodSeconds: 20
           securityContext:
             allowPrivilegeEscalation: false
