@@ -213,11 +213,18 @@ print-helm-package:	## Print the Helm package path.
 
 .PHONY: build-installer
 LOCAL_BUILDERS += build-installer
-build-installer: INSTALLER_DIR := $(BUILD_DIR)/installer
+ALL_BUILDERS += build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${CONTAINER_IMAGE_TAG}
-	mkdir -p "$(INSTALLER_DIR)"
-	$(KUSTOMIZE) build config/default > "$(INSTALLER_DIR)/install.yaml"
+	mkdir -p "$(BUILD_DIR)"
+	$(KUSTOMIZE) build config/default > "$(BUILD_DIR)/install.yaml"
+
+.PHONY: build-crds
+LOCAL_BUILDERS += build-crds
+ALL_BUILDERS += build-crds
+build-crds: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+	mkdir -p "$(BUILD_DIR)"
+	$(KUSTOMIZE) build config/crd > "$(BUILD_DIR)/crds.yaml"
 
 .PHONY: build
 build: manifests generate fmt vet schemas $(LOCAL_BUILDERS) ## Builds all local outputs (binaries, tarballs, licenses, etc.).
@@ -229,7 +236,10 @@ RELEASE_DIR = $(BUILD_DIR)/releases/$(VERSION)
 
 PHONY += release
 release: TAG = v$(VERSION)
-release: CP_CMDS = $(foreach PLATFORM,$(BINARY_PLATFORMS),cp $(TARBALL_DIR)/$(PLATFORM)/$(BINARY_NAME).tar.gz $(RELEASE_DIR)/$(BINARY_NAME)-$(VERSION)-$(subst /,-,$(PLATFORM)).tar.gz &&) true
+release: CP_CMDS = $(foreach PLATFORM,$(BINARY_PLATFORMS),cp $(TARBALL_DIR)/$(PLATFORM)/$(BINARY_NAME).tar.gz $(RELEASE_DIR)/$(BINARY_NAME)-$(VERSION)-$(subst /,-,$(PLATFORM)).tar.gz &&)
+release: CP_CMDS += cp $(BUILD_DIR)/install.yaml $(RELEASE_DIR)/install.yaml &&
+release: CP_CMDS += cp $(BUILD_DIR)/crds.yaml $(RELEASE_DIR)/crds.yaml &&
+release: CP_CMDS += true
 release: SAFETY_PREFIX = $(if $(findstring t,$(PUSH_ALL)),,echo)
 release: build-all	## Create a GitHub release including all tarballs for all supported platforms. Requires the GitHub CLI (gh).
 	@mkdir -p $(RELEASE_DIR)

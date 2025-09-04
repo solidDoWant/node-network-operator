@@ -33,15 +33,26 @@ var _ = Describe("Manager", Ordered, func() {
 		setupTeardown()
 
 		BeforeAll(func() {
+			By("building the install and crds manifests")
+			_, err := utils.Run(exec.Command("make", "build-installer", "build-crds", "IMG="+projectImage))
+			Expect(err).NotTo(HaveOccurred(), "Failed to build install and crds manifests")
+
+			By("installing CRDs")
+			crdsManifestPath := filepath.Join("build", "crds.yaml")
+			_, err = utils.Run(exec.Command("kubectl", "apply", "-f", crdsManifestPath))
+			Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
+
 			By("deploying the controller-manager with Kustomize")
-			cmd := exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-			_, err := utils.Run(cmd)
+			installManifestPath := filepath.Join("build", "install.yaml")
+			_, err = utils.Run(exec.Command("kubectl", "apply", "-f", installManifestPath))
 			Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
 			DeferCleanup(func() {
 				By("undeploying the controller-manager")
-				cmd = exec.Command("make", "undeploy")
-				_, _ = utils.Run(cmd)
+				_, _ = utils.Run(exec.Command("kubectl", "delete", "-f", installManifestPath))
+
+				By("uninstalling CRDs")
+				_, _ = utils.Run(exec.Command("kubectl", "delete", "-f", crdsManifestPath))
 			})
 		})
 
@@ -123,11 +134,6 @@ func setupTeardown() {
 			"pod-security.kubernetes.io/enforce=privileged")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
-
-		By("installing CRDs")
-		cmd = exec.Command("make", "install")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 		// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
 		// and deleting the namespace.
