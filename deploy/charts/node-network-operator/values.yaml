@@ -76,6 +76,8 @@ resources:
               containerPort: 9974
             - name: healthz
               containerPort: 9335
+            - name: webhook
+              containerPort: 9443
           probes:
             liveness:
               enabled: true
