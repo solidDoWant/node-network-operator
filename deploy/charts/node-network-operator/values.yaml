@@ -223,12 +223,12 @@ resources:
       service:
         identifier: cluster-metrics
       endpoints:
-        - port: metrics
+        - port: http-metrics
     node:
       service:
         identifier: node-metrics
       endpoints:
-        - port: metrics
+        - port: http-metrics
   serviceAccount:
     cluster: {}
     node: {}
