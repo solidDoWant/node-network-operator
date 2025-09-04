@@ -1,0 +1,11 @@
+{{- if .Values.config.crds.enabled }}
+{{ range $path, $_ :=  .Files.Glob  "rawCRDs/*" -}}
+---
+    {{- $fileContents := $.Files.Get $path -}}
+    {{- $crd := $fileContents | fromYaml -}}
+    {{- if $.Values.config.crds.keep -}}
+    {{- $crd = merge $crd (dict "metadata" (dict "annotations" (dict "helm.sh/resource-policy" "keep"))) -}}
+    {{- end -}}
+    {{- $crd | toYamlPretty | nindent 0 }}
+{{ end }}
+{{- end }}

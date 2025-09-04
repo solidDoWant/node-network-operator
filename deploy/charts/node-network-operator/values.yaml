@@ -1,5 +1,12 @@
 # High-level configuration for the node-network-operator chart.
 config:
+  crds:
+    # If true, the CRDs will be installed as part of the chart installation. If false, the CRDs must be
+    # installed separately.
+    enabled: true
+    # If true, the CRDs will be left installed when the chart is uninstalled. If false, the CRDs will be
+    # removed when the chart is uninstalled.
+    keep: true
   # Enable TLS on the webhook endpoints. This requires cert-manager to be installed in the cluster.
   webhook:
     enableTLS: true
