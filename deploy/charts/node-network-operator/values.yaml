@@ -9,11 +9,12 @@ config:
     keep: true
   # Enable TLS on the webhook endpoints. This requires cert-manager to be installed in the cluster.
   webhook:
-    enableTLS: true
+    enableTLS: false
     # This must be set when `enableTLS` is true. This should refer to a cert-manager Issuer or ClusterIssuer that can
     # issue certificates for the webhook service.
     issuerRef:
-      kind: ""
+      group: cert-manager.io
+      kind: Issuer
       name: ""
   # Set this to true if the operator should manage network configurations PRIOR to the setup of the primary CNI.
   # Let me know if you're doing this - I'd like to know how I can improve the operator to better support this use case.
@@ -379,6 +380,7 @@ resources:
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc'
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc.{{ .Values.config.clusterDomain }}'
           issuerRef:
+            group: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.group }}{{- end -}}"
             kind: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.kind }}{{- end -}}"
             name: "{{- if .Values.config.webhook.enableTLS -}}{{ .Values.config.webhook.issuerRef.name }}{{- end -}}"
     validating-webhook-configuration-tls:

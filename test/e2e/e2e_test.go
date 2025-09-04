@@ -99,6 +99,7 @@ var _ = Describe("Manager", Ordered, func() {
 				"--namespace", namespace,
 				"--set", "config.image.repository="+projectImageRepo,
 				"--set", "config.image.tag="+projectImageTag,
+				"--set", "config.webhook.enableTLS=true",
 				"--set", "config.webhook.issuerRef.kind=ClusterIssuer",
 				"--set", "config.webhook.issuerRef.name=self-signed",
 			)
