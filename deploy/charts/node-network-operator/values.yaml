@@ -379,7 +379,6 @@ resources:
         spec:
           secretName: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
           dnsNames:
-            - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}'
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc'
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc.{{ .Values.config.clusterDomain }}'
           issuerRef:
