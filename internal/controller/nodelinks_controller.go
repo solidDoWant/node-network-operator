@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -52,6 +54,7 @@ func NewNodeLinksReconciler(cluster cluster.Cluster, nodeName string) *NodeLinks
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/finalizers,verbs=create;patch
+// +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=links,verbs=list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -546,6 +549,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *nodenet
 		return fmt.Errorf("link %q has missing dependencies", linkResource.Spec.LinkName)
 	}
 
+	log.V(1).Info("checking if upsert is needed for link")
 	upsertNeeded, err := linkManager.IsUpsertNeeded(ctx, nodeLinks, linkResources)
 	if err != nil {
 		readyCOndition := metav1.Condition{
@@ -560,6 +564,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *nodenet
 	}
 
 	if upsertNeeded {
+		log.V(1).Info("upsert needed for link")
 		// Bring down any links in the dependent tree with SetDownOnDependencyChainUpdate=true
 		if ok {
 			if err := r.bringDownDependents(ctx, nodeLinks, linkResourceName, linkResources, linkGraph); err != nil {
@@ -589,6 +594,8 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *nodenet
 
 		// Dependency links should not be brought back up, as their desired state may depend on changes to other links.
 		// They will be brought back up when their own reconciliation is reached in the topological order.
+	} else {
+		log.V(1).Info("upsert not needed for link")
 	}
 
 	readyCondition := metav1.Condition{
@@ -936,6 +943,29 @@ func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return object.GetName() == r.nodeName
 				}),
 			),
+		).
+		// Watch Link resources and enqueue matched NodeLinks resource for reconciliation
+		Watches(
+			&nodenetworkoperatorv1alpha1.Link{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				link, ok := o.(*nodenetworkoperatorv1alpha1.Link)
+				if !ok {
+					logf.FromContext(ctx).Error(nil, "expected Link resource in watch handler")
+					return nil
+				}
+
+				// Skip resources that do not match this node
+				if !slices.Contains(link.Status.MatchedNodes, r.nodeName) {
+					return nil
+				}
+
+				return []reconcile.Request{{
+					NamespacedName: types.NamespacedName{
+						Name: r.nodeName,
+					},
+				}}
+			}),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Named("nodelinks").
 		WithOptions(controller.TypedOptions[reconcile.Request]{
