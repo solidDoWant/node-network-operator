@@ -409,6 +409,19 @@ func managerTests(metricsRequireSAToken bool) {
 
 				return nil
 			})).To(Succeed())
+
+			By("changing the Link resource MTU")
+			_, err = utils.Run(exec.Command("kubectl", "patch", "link", "link-sample", "--type=json",
+				"-p=[{\"op\": \"add\", \"path\": \"/spec/bridge/mtu\", \"value\": 1400}]"))
+			Expect(err).NotTo(HaveOccurred(), "Failed to patch Link resource")
+
+			By("validating that the Link resource change is applied")
+			Expect(utils.ForEachNode(func(node string) error {
+				ipLinkOutput, err := utils.Run(exec.Command("docker", "container", "exec", node, "ip", "link", "show", "sampleBridge1"))
+				Expect(err).NotTo(HaveOccurred(), "Failed to get link details on node")
+				Expect(ipLinkOutput).To(ContainSubstring("mtu 1400"), "Link MTU not updated")
+				return nil
+			}))
 		})
 
 		Context("gateway-network samples", func() {
