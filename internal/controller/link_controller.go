@@ -90,7 +90,7 @@ func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, lin
 		log.V(1).Info("adding finalizer to Link resource", "finalizer", linkFinalizerName)
 		if err := r.patchResource(ctx, clusterStateLink, link); err != nil {
 			condition := metav1.Condition{
-				Type:    "Ready",
+				Type:    nodenetworkoperatorv1alpha1.LinkConditionReady,
 				Status:  metav1.ConditionFalse,
 				Reason:  "FinalizerUpdateFailed",
 				Message: fmt.Sprintf("Failed to update Link status with finalizer: %v", err),
@@ -101,7 +101,7 @@ func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, lin
 
 	if err := r.updateNodeLinks(ctx, clusterStateLink, link); err != nil {
 		condition := metav1.Condition{
-			Type:    "Ready",
+			Type:    nodenetworkoperatorv1alpha1.LinkConditionReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NodeLinksUpdateFailed",
 			Message: fmt.Sprintf("Failed to update all NodeLinks resources: %v", err),
@@ -111,7 +111,7 @@ func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, lin
 
 	// Update the status of the bridge resource
 	condition := metav1.Condition{
-		Type:   "Ready",
+		Type:   nodenetworkoperatorv1alpha1.LinkConditionReady,
 		Status: metav1.ConditionTrue,
 		Reason: "ReconcileSuccessful",
 	}
@@ -131,7 +131,7 @@ func (r *LinkReconciler) handleDeletion(ctx context.Context, clusterStateLink, l
 	log.Info("deleting Link resources")
 	if err := r.removeFromUnmatchedNodeLinks(ctx, link, nil); err != nil {
 		condition := metav1.Condition{
-			Type:    "Cleanup",
+			Type:    nodenetworkoperatorv1alpha1.LinkConditionCleanup,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NodeLinksCleanupFailed",
 			Message: fmt.Sprintf("Failed to remove bridge from all NodeLinks resources: %v", err),
@@ -141,13 +141,13 @@ func (r *LinkReconciler) handleDeletion(ctx context.Context, clusterStateLink, l
 	}
 
 	readyCondition := metav1.Condition{
-		Type:    "Ready",
+		Type:    nodenetworkoperatorv1alpha1.LinkConditionReady,
 		Status:  metav1.ConditionFalse,
 		Reason:  "Deleted",
 		Message: fmt.Sprintf("Link %s has been deleted", link.Name),
 	}
 	cleanupCondition := metav1.Condition{
-		Type:    "Cleanup",
+		Type:    nodenetworkoperatorv1alpha1.LinkConditionCleanup,
 		Status:  metav1.ConditionTrue,
 		Reason:  "CleanupSuccessful",
 		Message: fmt.Sprintf("Link %s has been cleaned up successfully", link.Name),
@@ -171,7 +171,7 @@ func (r *LinkReconciler) updateNodeLinks(ctx context.Context, clusterStateLink, 
 	}
 
 	condition := metav1.Condition{
-		Type:   "Ready",
+		Type:   nodenetworkoperatorv1alpha1.LinkConditionReady,
 		Status: metav1.ConditionUnknown,
 		Reason: "ReconcileStarted",
 	}

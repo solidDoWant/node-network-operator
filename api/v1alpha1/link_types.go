@@ -4,6 +4,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	LinkConditionReady   = "Ready"
+	LinkConditionCleanup = "Cleanup"
+)
+
 // LinkReference is a reference to another link resource.
 type LinkReference struct {
 	// There isn't currently a need for these fields, as there is only one link type.
