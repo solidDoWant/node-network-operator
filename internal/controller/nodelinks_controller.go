@@ -255,11 +255,14 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *nodenetworkoperatorv1alph
 				return fmt.Errorf("failed to get link manager for Link %q: %w", resourceName, err)
 			}
 
-			// Verify that there are no duplicate link names in the spec
-			if otherResourceName, ok := seenNetlinkLinkNames[linkResource.Spec.LinkName]; ok {
-				return fmt.Errorf("link name %q is used by multiple Link resources: %q and %q", linkResource.Spec.LinkName, otherResourceName, resourceName)
+			// Skip this check for unmanaged links, as unmanaged links can refer to the same link name
+			if linkManager.IsManaged() {
+				// Verify that there are no duplicate link names in the spec
+				if otherResourceName, ok := seenNetlinkLinkNames[linkResource.Spec.LinkName]; ok {
+					return fmt.Errorf("link name %q is used by multiple Link resources: %q and %q", linkResource.Spec.LinkName, otherResourceName, resourceName)
+				}
+				seenNetlinkLinkNames[linkResource.Spec.LinkName] = resourceName
 			}
-			seenNetlinkLinkNames[linkResource.Spec.LinkName] = resourceName
 
 			for _, dependencyLink := range linkManager.GetDependencies() {
 				// Error if the dependency name is the same as the dependent name
