@@ -1,0 +1,16 @@
+---
+apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
+kind: Link
+metadata:
+  name: unmanaged-eth0-1
+spec:
+  interfaceName: eth0
+  unmanaged: {}
+---
+apiVersion: nodenetworkoperator.soliddowant.dev/v1alpha1
+kind: Link
+metadata:
+  name: unmanaged-eth0-2
+spec:
+  interfaceName: eth0
+  unmanaged: {}

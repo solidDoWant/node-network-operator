@@ -389,12 +389,11 @@ func managerTests(metricsRequireSAToken bool) {
 			}()
 
 			By("validating that the Link resource is created")
-			verifyLinkCreated := func(g Gomega) {
+			Eventually(func(g Gomega) {
 				isReady, err := utils.Run(exec.Command("kubectl", "get", "link", "link-sample", "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to get Link resource")
 				g.Expect(isReady).To(Equal("True"), "Link resource should be ready")
-			}
-			Eventually(verifyLinkCreated).Should(Succeed())
+			}).Should(Succeed())
 
 			By("validating that the NodeLinks resource succeeds")
 			Expect(utils.ForEachNode(func(node string) error {
@@ -422,6 +421,26 @@ func managerTests(metricsRequireSAToken bool) {
 				Expect(ipLinkOutput).To(ContainSubstring("mtu 1400"), "Link MTU not updated")
 				return nil
 			}))
+
+			By("deploying multiple unmanaged Link resources that refer to the same link name")
+			_, err = utils.Run(exec.Command("kubectl", "apply", "-f", "test/e2e/manifests/unmanaged.yaml"))
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply unmanaged Link resource")
+
+			defer func() {
+				By("deleting the unmanaged Link resources")
+				_, err := utils.Run(exec.Command("kubectl", "delete", "-f", "test/e2e/manifests/unmanaged.yaml"))
+				Expect(err).NotTo(HaveOccurred(), "Failed to delete unmanaged Link resources")
+			}()
+
+			By("validating that all NodeLinks resources succeed")
+			utils.ForEachNode(func(node string) error {
+				Eventually(func(g Gomega) {
+					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
+					Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
+					Expect(isReady).To(Equal("True"), "NodeLinks resource should be ready")
+				}, 5*time.Second).Should(Succeed())
+				return nil
+			})
 		})
 
 		Context("gateway-network samples", func() {
