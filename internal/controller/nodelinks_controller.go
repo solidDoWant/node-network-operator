@@ -8,13 +8,14 @@ import (
 	"slices"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -27,6 +28,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/dominikbraun/graph"
@@ -44,7 +46,7 @@ type NodeLinksReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	nodeName string
-	recorder record.EventRecorder
+	recorder recorder.EventRecorder
 
 	// ResyncInterval is how often the node's links are re-checked after a successful reconcile, which repairs
 	// changes made outside the operator (for example, a VXLAN removed by the kernel along with its device).
@@ -63,7 +65,7 @@ func NewNodeLinksReconciler(k8sCluster cluster.Cluster, nodeName string) *NodeLi
 		Client:   k8sCluster.GetClient(),
 		Scheme:   k8sCluster.GetScheme(),
 		nodeName: nodeName,
-		recorder: k8sCluster.GetEventRecorderFor("nodelinks-controller"),
+		recorder: k8sCluster.GetEventRecorder("nodelinks-controller"),
 
 		watchedLinkNames: &linkNameSet{},
 		linkEvents:       make(chan event.GenericEvent, 1),
@@ -75,6 +77,7 @@ func NewNodeLinksReconciler(k8sCluster cluster.Cluster, nodeName string) *NodeLi
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks/finalizers,verbs=create;patch
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=links,verbs=list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -111,9 +114,9 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 		log.V(1).Info("adding finalizer to NodeLinks resource", "finalizer", nodeLinksFinalizerName)
 		if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
 			condition := &metav1.Condition{
-				Type:    "Ready",
+				Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 				Status:  metav1.ConditionFalse,
-				Reason:  "FinalizerUpdateFailed",
+				Reason:  reasonFinalizerUpdateFailed,
 				Message: fmt.Sprintf("Failed to update NodeLinks status with finalizer: %v", err),
 			}
 			return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, condition, err, "failed to update NodeLinks status with finalizer")
@@ -211,9 +214,9 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 
 	// Update the status of the NodeLinks resource
 	condition := metav1.Condition{
-		Type:   "Ready",
+		Type:   nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 		Status: metav1.ConditionTrue,
-		Reason: "ReconcileSuccessful",
+		Reason: reasonReconcileSuccessful,
 	}
 	meta.SetStatusCondition(&nodeLinks.Status.Conditions, condition)
 	if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
@@ -241,9 +244,9 @@ func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNo
 	controllerutil.RemoveFinalizer(nodeLinks, nodeLinksFinalizerName)
 	if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
 		condition := &metav1.Condition{
-			Type:    "Ready",
+			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "FinalizerUpdateFailed",
+			Reason:  reasonFinalizerUpdateFailed,
 			Message: fmt.Sprintf("Failed to update NodeLinks status with finalizer: %v", err),
 		}
 		return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, condition, err, "failed to remove finalizer from NodeLinks resource")
@@ -317,11 +320,11 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *nodenetworkoperatorv1alph
 
 		if err != nil {
 			validConfigCondition.Status = metav1.ConditionFalse
-			validConfigCondition.Reason = "InvalidConfiguration"
+			validConfigCondition.Reason = reasonInvalidConfiguration
 			validConfigCondition.Message = fmt.Sprintf("Link configuration is invalid: %v", err)
 
 			readyCondition.Status = metav1.ConditionFalse
-			readyCondition.Reason = "InvalidConfiguration"
+			readyCondition.Reason = reasonInvalidConfiguration
 			readyCondition.Message = "Link cannot be ready because its configuration is invalid"
 
 			errs = append(errs, err)
@@ -336,7 +339,7 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *nodenetworkoperatorv1alph
 		readyCondition := &metav1.Condition{
 			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "InvalidConfiguration",
+			Reason:  reasonInvalidConfiguration,
 			Message: "One or more Link configurations are invalid, see individual link conditions for details",
 		}
 		meta.SetStatusCondition(&nodeLinks.Status.Conditions, *readyCondition)
@@ -463,7 +466,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 			readyCondition := metav1.Condition{
 				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 				Status:  metav1.ConditionFalse,
-				Reason:  "MissingDependencyLinks",
+				Reason:  reasonMissingDependencyLinks,
 				Message: "Link is missing dependency links",
 			}
 			r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, readyCondition)
@@ -471,7 +474,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 			dependencyCondition := metav1.Condition{
 				Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable,
 				Status:  metav1.ConditionFalse,
-				Reason:  "MissingDependencyLinks",
+				Reason:  reasonMissingDependencyLinks,
 				Message: fmt.Sprintf("Link is missing required dependency links: %v", missingRequiredDependencyNames),
 			}
 			r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, dependencyCondition)
@@ -518,7 +521,7 @@ func (r *NodeLinksReconciler) updateDependentsMissingDependencies(ctx context.Co
 		readyCondition := metav1.Condition{
 			Type:    nodenetworkoperatorv1alpha1.NodeLinkConditionReady,
 			Status:  metav1.ConditionFalse,
-			Reason:  "MissingDependencyLinks",
+			Reason:  reasonMissingDependencyLinks,
 			Message: "One or more links are missing required dependency links, see individual link conditions for details",
 		}
 		meta.SetStatusCondition(&nodeLinks.Status.Conditions, readyCondition)
@@ -638,7 +641,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *nodenet
 	readyCondition := metav1.Condition{
 		Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady,
 		Status:  metav1.ConditionTrue,
-		Reason:  "ReconcileSuccessful",
+		Reason:  reasonReconcileSuccessful,
 		Message: "Link is in the desired state",
 	}
 	r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, readyCondition)
@@ -996,7 +999,7 @@ func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNod
 // patchFailed logs and records a failed patch, returning a wrapped error.
 func (r *NodeLinksReconciler) patchFailed(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, err error) error {
 	logf.FromContext(ctx).Error(err, fmt.Sprintf("failed to patch %T", nodeLinks))
-	r.recorder.Eventf(nodeLinks, "Warning", "StatusUpdateFailed", "Failed to update %T: %v", nodeLinks, err)
+	r.recorder.Eventf(nodeLinks, nil, corev1.EventTypeWarning, "StatusUpdateFailed", "UpdateStatus", "Failed to update %T: %v", nodeLinks, err)
 	return fmt.Errorf("failed to patch %T: %w", nodeLinks, err)
 }
 
