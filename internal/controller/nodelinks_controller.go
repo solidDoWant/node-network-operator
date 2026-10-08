@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -88,7 +89,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 	log := logf.FromContext(ctx).WithValues("action", "upsert")
 	logf.IntoContext(ctx, log)
 
-	if !controllerutil.AddFinalizer(nodeLinks, nodeLinksFinalizerName) {
+	if controllerutil.AddFinalizer(nodeLinks, nodeLinksFinalizerName) {
 		log.V(1).Info("adding finalizer to NodeLinks resource", "finalizer", nodeLinksFinalizerName)
 		if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
 			condition := &metav1.Condition{
@@ -905,39 +906,47 @@ func (r *NodeLinksReconciler) setLinkCondition(nodeLinks *nodenetworkoperatorv1a
 func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) error {
 	log := logf.FromContext(ctx)
 
-	// Determine whether the entire resource needs a patch or just the status
-	// Ignore status changes, these always need to be applied and will always differ
-	newStatus := nodeLinks.Status.DeepCopy()
+	// Status is a subresource: the main endpoint ignores status changes, and the status endpoint ignores everything
+	// else. Patch each part that changed, the main resource first.
+	desiredStatus := nodeLinks.Status.DeepCopy()
 	nodeLinks.Status = clusterStateNodeLinks.Status
-	onlyStatusPatchIsNeeded := equality.Semantic.DeepEqual(clusterStateNodeLinks, nodeLinks)
-	nodeLinks.Status = *newStatus
+	if !equality.Semantic.DeepEqual(clusterStateNodeLinks, nodeLinks) {
+		log.V(1).Info(fmt.Sprintf("updating full %T resource", clusterStateNodeLinks), "patchType", "full")
 
-	var err error
-	if onlyStatusPatchIsNeeded {
-		log = log.WithValues("patchType", "status")
-		log.V(1).Info(fmt.Sprintf("updating %T status resource only", clusterStateNodeLinks))
-		logf.IntoContext(ctx, log)
-
-		err = r.Status().Patch(ctx, nodeLinks, client.MergeFrom(clusterStateNodeLinks))
-	} else {
-		log = log.WithValues("patchType", "full")
-		log.V(1).Info(fmt.Sprintf("updating full %T resource", clusterStateNodeLinks))
-		logf.IntoContext(ctx, log)
-
-		err = r.Patch(ctx, nodeLinks, client.MergeFrom(clusterStateNodeLinks))
+		// On success, the response replaces nodeLinks with the stored object, including its stored status.
+		if err := r.Patch(ctx, nodeLinks, client.MergeFrom(clusterStateNodeLinks)); err != nil {
+			nodeLinks.Status = *desiredStatus
+			return r.patchFailed(ctx, nodeLinks, err)
+		}
+		*clusterStateNodeLinks = *nodeLinks.DeepCopy()
 	}
+	nodeLinks.Status = *desiredStatus
 
-	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to patch %T status", clusterStateNodeLinks))
-		r.recorder.Eventf(nodeLinks, "Warning", "StatusUpdateFailed", "Failed to update %T status: %v", clusterStateNodeLinks, err)
-		return fmt.Errorf("failed to patch %T status: %w", clusterStateNodeLinks, err)
+	if !equality.Semantic.DeepEqual(clusterStateNodeLinks.Status, nodeLinks.Status) {
+		log.V(1).Info(fmt.Sprintf("updating %T status resource only", clusterStateNodeLinks), "patchType", "status")
+
+		err := r.Status().Patch(ctx, nodeLinks, client.MergeFrom(clusterStateNodeLinks))
+		// Removing the last finalizer of a resource that is being deleted removes the resource, leaving no status to patch.
+		if apierrors.IsNotFound(err) && !nodeLinks.DeletionTimestamp.IsZero() {
+			err = nil
+		}
+		if err != nil {
+			return r.patchFailed(ctx, nodeLinks, err)
+		}
 	}
 
 	// Update the clusterStateNodeLinks to reflect the new object state
 	*clusterStateNodeLinks = *nodeLinks.DeepCopy()
 
-	log.V(1).Info(fmt.Sprintf("%T status updated", clusterStateNodeLinks))
+	log.V(1).Info(fmt.Sprintf("%T updated", clusterStateNodeLinks))
 	return nil
+}
+
+// patchFailed logs and records a failed patch, returning a wrapped error.
+func (r *NodeLinksReconciler) patchFailed(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, err error) error {
+	logf.FromContext(ctx).Error(err, fmt.Sprintf("failed to patch %T", nodeLinks))
+	r.recorder.Eventf(nodeLinks, "Warning", "StatusUpdateFailed", "Failed to update %T: %v", nodeLinks, err)
+	return fmt.Errorf("failed to patch %T: %w", nodeLinks, err)
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -6,19 +6,17 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 )
 
 var _ = Describe("Link Controller", func() {
@@ -396,6 +394,40 @@ var _ = Describe("Link Controller", func() {
 			Expect(k8sClient.Get(ctx, nodeLinksKey, &nodeLinks)).To(Succeed())
 			Expect(nodeLinks.DeletionTimestamp.IsZero()).To(BeTrue(), "The new NodeLinks should not be pending deletion")
 			Expect(nodeLinks.Spec.MatchingLinks).To(ConsistOf(linkName))
+		})
+	})
+
+	Context("When patching a resource", func() {
+		ctx := context.Background()
+
+		It("should persist metadata and status changes made together", func() {
+			link := &nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-patch-link"},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName:  "test-br2",
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{Bridge: &nodenetworkoperatorv1alpha1.BridgeSpec{}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, link)).To(Succeed())
+			DeferCleanup(func() {
+				var current nodenetworkoperatorv1alpha1.Link
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(link), &current); err == nil {
+					current.Finalizers = nil
+					Expect(client.IgnoreNotFound(k8sClient.Update(ctx, &current))).To(Succeed())
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &current))).To(Succeed())
+				}
+			})
+
+			clusterStateLink := link.DeepCopy()
+			controllerutil.AddFinalizer(link, linkFinalizerName)
+			link.Status.MatchedNodes = []string{"test-node"}
+			Expect(NewLinkReconciler(k8sCluster).patchResource(ctx, clusterStateLink, link)).To(Succeed())
+
+			Expect(link.Status.MatchedNodes).To(ConsistOf("test-node"), "The in-memory status should be kept")
+			var stored nodenetworkoperatorv1alpha1.Link
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(link), &stored)).To(Succeed())
+			Expect(stored.Finalizers).To(ContainElement(linkFinalizerName))
+			Expect(stored.Status.MatchedNodes).To(ConsistOf("test-node"))
 		})
 	})
 })

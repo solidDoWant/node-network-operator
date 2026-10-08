@@ -5,17 +5,16 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 	"github.com/vishvananda/netlink"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 )
 
 var _ = Describe("NodeLinks Controller", func() {
@@ -306,6 +305,85 @@ var _ = Describe("NodeLinks Controller", func() {
 			Expect(vxlan.Attrs().MasterIndex).To(BeZero(), "The VXLAN should have no master")
 			Expect(meta.IsStatusConditionTrue(getLinkConditions(vxlanInterfaceName), nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady)).
 				To(BeTrue(), "The dependent VXLAN should be ready")
+		})
+	})
+
+	Context("When reconciling a new resource", func() {
+		const nodeName = "test-new-nodelinks-node"
+		const linkName = "test-new-nodelinks-bridge"
+		const interfaceName = "nl-test-br1"
+
+		ctx := context.Background()
+		request := reconcile.Request{NamespacedName: types.NamespacedName{Name: nodeName}}
+
+		AfterEach(func() {
+			if link, err := netlink.LinkByName(interfaceName); err == nil {
+				_ = netlink.LinkDel(link)
+			}
+
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			if err := k8sClient.Get(ctx, request.NamespacedName, &nodeLinks); err == nil {
+				nodeLinks.Finalizers = nil
+				Expect(client.IgnoreNotFound(k8sClient.Update(ctx, &nodeLinks))).To(Succeed())
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &nodeLinks))).To(Succeed())
+			}
+			link := &nodenetworkoperatorv1alpha1.Link{ObjectMeta: metav1.ObjectMeta{Name: linkName}}
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, link))).To(Succeed())
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}))).To(Succeed())
+		})
+
+		It("should succeed and persist its state on the first reconcile", func() {
+			Expect(k8sClient.Create(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: linkName},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName:  interfaceName,
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{Bridge: &nodenetworkoperatorv1alpha1.BridgeSpec{}},
+				},
+			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.NodeLinks{
+				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+				Spec:       nodenetworkoperatorv1alpha1.NodeLinksSpec{MatchingLinks: []string{linkName}},
+			})).To(Succeed())
+
+			_, err := NewNodeLinksReconciler(k8sCluster, nodeName).Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			Expect(k8sClient.Get(ctx, request.NamespacedName, &nodeLinks)).To(Succeed())
+			Expect(nodeLinks.Finalizers).To(ContainElement(nodeLinksFinalizerName))
+			// Deleting links relies on this field, so it must be persisted before any link is created.
+			Expect(nodeLinks.Status.LastAttemptedNetlinkLinks).To(ConsistOf(interfaceName))
+			Expect(meta.IsStatusConditionTrue(nodeLinks.Status.Conditions, nodenetworkoperatorv1alpha1.NodeLinkConditionReady)).To(BeTrue())
+			Expect(meta.IsStatusConditionTrue(nodeLinks.Status.NetlinkLinkConditions[interfaceName], nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady)).To(BeTrue())
+		})
+	})
+
+	Context("When patching a resource", func() {
+		ctx := context.Background()
+
+		It("should persist metadata and status changes made together", func() {
+			nodeLinks := &nodenetworkoperatorv1alpha1.NodeLinks{ObjectMeta: metav1.ObjectMeta{Name: "test-patch-nodelinks"}}
+			Expect(k8sClient.Create(ctx, nodeLinks)).To(Succeed())
+			DeferCleanup(func() {
+				var current nodenetworkoperatorv1alpha1.NodeLinks
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(nodeLinks), &current); err == nil {
+					current.Finalizers = nil
+					Expect(client.IgnoreNotFound(k8sClient.Update(ctx, &current))).To(Succeed())
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &current))).To(Succeed())
+				}
+			})
+
+			clusterStateNodeLinks := nodeLinks.DeepCopy()
+			controllerutil.AddFinalizer(nodeLinks, nodeLinksFinalizerName)
+			nodeLinks.Status.LastAttemptedNetlinkLinks = []string{"test-link"}
+			Expect(NewNodeLinksReconciler(k8sCluster, "").patchResource(ctx, clusterStateNodeLinks, nodeLinks)).To(Succeed())
+
+			Expect(nodeLinks.Status.LastAttemptedNetlinkLinks).To(ConsistOf("test-link"), "The in-memory status should be kept")
+			var stored nodenetworkoperatorv1alpha1.NodeLinks
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(nodeLinks), &stored)).To(Succeed())
+			Expect(stored.Finalizers).To(ContainElement(nodeLinksFinalizerName))
+			Expect(stored.Status.LastAttemptedNetlinkLinks).To(ConsistOf("test-link"))
 		})
 	})
 })
