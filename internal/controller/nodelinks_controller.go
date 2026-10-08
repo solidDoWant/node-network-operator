@@ -352,6 +352,12 @@ func (r *NodeLinksReconciler) buildDesiredLinkGraph(linkResources map[string]*no
 		}
 
 		for _, dependencyLink := range linkManager.GetDependencies() {
+			// Dependencies that are not on this node have no vertex. The dependent is still reconciled, and
+			// updateDependentsMissingDependencies handles the missing dependency.
+			if _, ok := linkResources[dependencyLink.Name]; !ok {
+				continue
+			}
+
 			// Store the link reference in the edge data
 			setData := func(p *graph.EdgeProperties) {
 				if p == nil {

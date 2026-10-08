@@ -199,4 +199,113 @@ var _ = Describe("NodeLinks Controller", func() {
 			}).Should(BeTrue(), "NodeLinks resource should eventually be deleted")
 		})
 	})
+
+	Context("When a link dependency is not on the node", func() {
+		const nodeName = "test-missing-dependency-node"
+		const bridgeLinkName = "test-healthy-bridge"
+		const bridgeInterfaceName = "nl-test-br0"
+		const vxlanLinkName = "test-dependent-vxlan"
+		const vxlanInterfaceName = "nl-test-vx0"
+
+		ctx := context.Background()
+		request := reconcile.Request{NamespacedName: types.NamespacedName{Name: nodeName}}
+
+		createResources := func(optional bool) {
+			Expect(k8sClient.Create(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: bridgeLinkName},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName:  bridgeInterfaceName,
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{Bridge: &nodenetworkoperatorv1alpha1.BridgeSpec{}},
+				},
+			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: vxlanLinkName},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName: vxlanInterfaceName,
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+						VXLAN: &nodenetworkoperatorv1alpha1.VXLANSpecs{
+							VNID:            4246,
+							RemoteIPAddress: "10.255.0.1",
+							RemotePort:      4789,
+							SourcePort:      &nodenetworkoperatorv1alpha1.PortRange{Start: 4789, End: 4789},
+							// This Link is not in the NodeLinks, as if its node selector did not match this node.
+							Master: &nodenetworkoperatorv1alpha1.LinkReference{Name: "test-link-not-on-node", Optional: optional},
+						},
+					},
+				},
+			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.NodeLinks{
+				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+				Spec:       nodenetworkoperatorv1alpha1.NodeLinksSpec{MatchingLinks: []string{bridgeLinkName, vxlanLinkName}},
+			})).To(Succeed())
+		}
+
+		// Reconciles twice so that the result does not depend on the outcome of the first reconcile of a new NodeLinks.
+		reconcileNodeLinks := func() error {
+			_, _ = NewNodeLinksReconciler(k8sCluster, nodeName).Reconcile(ctx, request)
+			_, err := NewNodeLinksReconciler(k8sCluster, nodeName).Reconcile(ctx, request)
+			return err
+		}
+
+		getLinkConditions := func(interfaceName string) []metav1.Condition {
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			Expect(k8sClient.Get(ctx, request.NamespacedName, &nodeLinks)).To(Succeed())
+			return nodeLinks.Status.NetlinkLinkConditions[interfaceName]
+		}
+
+		AfterEach(func() {
+			for _, interfaceName := range []string{vxlanInterfaceName, bridgeInterfaceName} {
+				if link, err := netlink.LinkByName(interfaceName); err == nil {
+					_ = netlink.LinkDel(link)
+				}
+			}
+
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			if err := k8sClient.Get(ctx, request.NamespacedName, &nodeLinks); err == nil {
+				nodeLinks.Finalizers = nil
+				Expect(client.IgnoreNotFound(k8sClient.Update(ctx, &nodeLinks))).To(Succeed())
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &nodeLinks))).To(Succeed())
+			}
+			for _, name := range []string{bridgeLinkName, vxlanLinkName} {
+				link := &nodenetworkoperatorv1alpha1.Link{ObjectMeta: metav1.ObjectMeta{Name: name}}
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, link))).To(Succeed())
+			}
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}))).To(Succeed())
+		})
+
+		It("should still reconcile other links when a required dependency is missing", func() {
+			createResources(false)
+
+			// The dependent link cannot be reconciled, so the overall reconcile reports an error.
+			Expect(reconcileNodeLinks()).To(HaveOccurred())
+
+			By("verifying the healthy link was created")
+			_, err := netlink.LinkByName(bridgeInterfaceName)
+			Expect(err).NotTo(HaveOccurred(), "The healthy bridge should be created")
+			Expect(meta.IsStatusConditionTrue(getLinkConditions(bridgeInterfaceName), nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady)).
+				To(BeTrue(), "The healthy bridge should be ready")
+
+			By("verifying the dependent link reports the missing dependency")
+			dependencyCondition := meta.FindStatusCondition(getLinkConditions(vxlanInterfaceName), nodenetworkoperatorv1alpha1.NetlinkLinkConditionDependencyLinksAvailable)
+			Expect(dependencyCondition).NotTo(BeNil())
+			Expect(dependencyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(dependencyCondition.Reason).To(Equal("MissingDependencyLinks"))
+		})
+
+		It("should configure a link without an optional dependency that is missing", func() {
+			createResources(true)
+
+			Expect(reconcileNodeLinks()).To(Succeed())
+
+			By("verifying both links were created")
+			_, err := netlink.LinkByName(bridgeInterfaceName)
+			Expect(err).NotTo(HaveOccurred(), "The healthy bridge should be created")
+			vxlan, err := netlink.LinkByName(vxlanInterfaceName)
+			Expect(err).NotTo(HaveOccurred(), "The dependent VXLAN should be created")
+			Expect(vxlan.Attrs().MasterIndex).To(BeZero(), "The VXLAN should have no master")
+			Expect(meta.IsStatusConditionTrue(getLinkConditions(vxlanInterfaceName), nodenetworkoperatorv1alpha1.NetlinkLinkConditionReady)).
+				To(BeTrue(), "The dependent VXLAN should be ready")
+		})
+	})
 })
