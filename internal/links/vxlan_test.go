@@ -109,3 +109,70 @@ func TestVXLANLearning(t *testing.T) {
 		}
 	})
 }
+
+func TestVXLANSourcePortRange(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to manage netlink links")
+	}
+
+	const interfaceName = "vxlan-srcport"
+
+	newLink := func(start, end int32) *nodenetworkoperatorv1alpha1.Link {
+		return &nodenetworkoperatorv1alpha1.Link{
+			Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+				LinkName: interfaceName,
+				LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+					VXLAN: &nodenetworkoperatorv1alpha1.VXLANSpecs{
+						VNID:            4243,
+						RemoteIPAddress: "10.255.0.1",
+						RemotePort:      4789,
+						SourcePort:      &nodenetworkoperatorv1alpha1.PortRange{Start: start, End: end},
+					},
+				},
+			},
+		}
+	}
+
+	t.Cleanup(func() {
+		_ = netlink.LinkDel(&netlink.Vxlan{LinkAttrs: netlink.LinkAttrs{Name: interfaceName}})
+	})
+
+	if err := NewVXLANManager(newLink(4789, 4789)).Upsert(context.Background(), nil, nil); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	link := newLink(10000, 20000)
+	manager := NewVXLANManager(link)
+
+	needed, err := manager.IsUpsertNeeded(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("upsert check failed: %v", err)
+	}
+	if !needed {
+		t.Fatal("expected source port range drift to require an upsert")
+	}
+
+	if err := manager.Upsert(context.Background(), nil, nil); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	existing, err := netlink.LinkByName(interfaceName)
+	if err != nil {
+		t.Fatalf("failed to get link: %v", err)
+	}
+	vxlan, ok := existing.(*netlink.Vxlan)
+	if !ok {
+		t.Fatalf("link is a %s, not a vxlan", existing.Type())
+	}
+	if vxlan.PortLow != 10000 || vxlan.PortHigh != 20000 {
+		t.Fatalf("expected source port range 10000-20000, got %d-%d", vxlan.PortLow, vxlan.PortHigh)
+	}
+
+	needed, err = manager.IsUpsertNeeded(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("upsert check failed: %v", err)
+	}
+	if needed {
+		t.Fatal("upsert still needed after upsert")
+	}
+}
