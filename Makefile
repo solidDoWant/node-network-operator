@@ -20,6 +20,20 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Tool paths are defined before any target that lists them as a prerequisite, since make expands prerequisites
+# when it reads each rule.
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+
+## Tool Binaries
+KUBECTL ?= kubectl
+KIND ?= kind
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GINKGO = $(LOCALBIN)/ginkgo
+
 .PHONY: all
 all: build
 
@@ -282,22 +296,11 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 TOOLING_DIR ?= $(dir $(abspath $(lastword $(MAKEFILE_LIST))))tooling
 
-## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 print-localbin:
 	@echo $(LOCALBIN)
-
-## Tool Binaries
-KUBECTL ?= kubectl
-KIND ?= kind
-KUSTOMIZE ?= $(LOCALBIN)/kustomize
-CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
-ENVTEST ?= $(LOCALBIN)/setup-envtest
-GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-GINKGO = $(LOCALBIN)/ginkgo
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
