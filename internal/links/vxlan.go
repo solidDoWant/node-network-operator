@@ -91,7 +91,9 @@ func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetwor
 		return true, nil
 	}
 
-	if vxlanLink.OperState != netlink.OperUp {
+	// VXLAN links do not track carrier, so their operational state is always "unknown". Check the
+	// administrative state instead.
+	if vxlanLink.Flags&net.FlagUp == 0 {
 		return true, nil
 	}
 
