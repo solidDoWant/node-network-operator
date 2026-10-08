@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,6 +22,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 
 	"github.com/elliotchance/pie/v2"
 	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
@@ -36,14 +36,14 @@ var (
 type LinkReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	recorder record.EventRecorder
+	recorder recorder.EventRecorder
 }
 
 func NewLinkReconciler(k8sCluster cluster.Cluster) *LinkReconciler {
 	return &LinkReconciler{
 		Client:   k8sCluster.GetClient(),
 		Scheme:   k8sCluster.GetScheme(),
-		recorder: k8sCluster.GetEventRecorderFor("link-controller"),
+		recorder: k8sCluster.GetEventRecorder("link-controller"),
 	}
 }
 
@@ -52,6 +52,7 @@ func NewLinkReconciler(k8sCluster cluster.Cluster) *LinkReconciler {
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=links/finalizers,verbs=update
 // +kubebuilder:rbac:groups=nodenetworkoperator.soliddowant.dev,resources=nodelinks,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -92,7 +93,7 @@ func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, lin
 			condition := metav1.Condition{
 				Type:    nodenetworkoperatorv1alpha1.LinkConditionReady,
 				Status:  metav1.ConditionFalse,
-				Reason:  "FinalizerUpdateFailed",
+				Reason:  reasonFinalizerUpdateFailed,
 				Message: fmt.Sprintf("Failed to update Link status with finalizer: %v", err),
 			}
 			return r.handleError(ctx, clusterStateLink, link, condition, err, "failed to update Link status with finalizer")
@@ -113,7 +114,7 @@ func (r *LinkReconciler) handleUpsert(ctx context.Context, clusterStateLink, lin
 	condition := metav1.Condition{
 		Type:   nodenetworkoperatorv1alpha1.LinkConditionReady,
 		Status: metav1.ConditionTrue,
-		Reason: "ReconcileSuccessful",
+		Reason: reasonReconcileSuccessful,
 	}
 	meta.SetStatusCondition(&link.Status.Conditions, condition)
 	return ctrl.Result{}, r.patchResource(ctx, clusterStateLink, link)
@@ -389,7 +390,7 @@ func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, li
 // patchFailed logs and records a failed patch, returning a wrapped error.
 func (r *LinkReconciler) patchFailed(ctx context.Context, link *nodenetworkoperatorv1alpha1.Link, err error) error {
 	logf.FromContext(ctx).Error(err, fmt.Sprintf("failed to patch %T", link))
-	r.recorder.Eventf(link, "Warning", "StatusUpdateFailed", "Failed to update %T: %v", link, err)
+	r.recorder.Eventf(link, nil, corev1.EventTypeWarning, "StatusUpdateFailed", "UpdateStatus", "Failed to update %T: %v", link, err)
 	return fmt.Errorf("failed to patch %T: %w", link, err)
 }
 

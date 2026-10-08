@@ -13,18 +13,18 @@ import (
 )
 
 const (
-	prometheusOperatorVersion = "v0.77.1"
+	prometheusOperatorVersion = "v0.94.1"
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
 
-	certmanagerVersion = "v1.16.3"
+	certmanagerVersion = "v1.21.2"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
-	multusVersion = "v4.2.2"
+	multusVersion = "v4.3.1"
 	multusURLTmpl = "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/refs/tags/%s/" +
 		"deployments/multus-daemonset-thick.yml"
 
-	whereaboutsVersion = "v0.9.2"
+	whereaboutsVersion = "v0.9.4"
 	whereaboutsURL     = "https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/refs/tags/%s/doc/crds/%s"
 )
 

@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // NodeLinksSpec defines the desired state of NodeLinks
@@ -80,5 +81,8 @@ type NodeLinksList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&NodeLinks{}, &NodeLinksList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, &NodeLinks{}, &NodeLinksList{})
+		return nil
+	})
 }

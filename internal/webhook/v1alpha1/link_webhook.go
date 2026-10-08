@@ -7,10 +7,8 @@ import (
 	"net"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
@@ -22,7 +20,7 @@ var linklog = logf.Log.WithName("link-resource")
 
 // SetupLinkWebhookWithManager registers the webhook for Link in the manager.
 func SetupLinkWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&nodenetworkoperatorv1alpha1.Link{}).
+	return ctrl.NewWebhookManagedBy(mgr, &nodenetworkoperatorv1alpha1.Link{}).
 		WithValidator(&LinkCustomValidator{}).
 		Complete()
 }
@@ -38,24 +36,19 @@ func SetupLinkWebhookWithManager(mgr ctrl.Manager) error {
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type LinkCustomValidator struct{}
 
-var _ webhook.CustomValidator = &LinkCustomValidator{}
+var _ admission.Validator[*nodenetworkoperatorv1alpha1.Link] = &LinkCustomValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Link.
-func (v *LinkCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type Link.
+func (v *LinkCustomValidator) ValidateCreate(_ context.Context, obj *nodenetworkoperatorv1alpha1.Link) (admission.Warnings, error) {
 	return v.validate(obj)
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Link.
-func (v *LinkCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type Link.
+func (v *LinkCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj *nodenetworkoperatorv1alpha1.Link) (admission.Warnings, error) {
 	return v.validate(newObj)
 }
 
-func (v *LinkCustomValidator) validate(obj runtime.Object) (admission.Warnings, error) {
-	link, ok := obj.(*nodenetworkoperatorv1alpha1.Link)
-	if !ok {
-		return nil, fmt.Errorf("expected a Link object for the newObj but got %T", obj)
-	}
-
+func (v *LinkCustomValidator) validate(link *nodenetworkoperatorv1alpha1.Link) (admission.Warnings, error) {
 	linklog.Info("Validation for Link", "name", link.GetName())
 
 	errs := make([]error, 0, 2)
@@ -101,8 +94,8 @@ func (v *LinkCustomValidator) validateVXLANRemote(link *nodenetworkoperatorv1alp
 	return nil
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Link.
-func (v *LinkCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type Link.
+func (v *LinkCustomValidator) ValidateDelete(ctx context.Context, obj *nodenetworkoperatorv1alpha1.Link) (admission.Warnings, error) {
 	// This is a no-op, but needed to satisfy the interface.
 	return nil, nil
 }
