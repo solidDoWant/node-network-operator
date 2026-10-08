@@ -168,7 +168,7 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect(os.Remove(filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Or(Succeed(), MatchError(os.IsNotExist)),
+	Expect(os.Remove(filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))).To(Or(Succeed(), MatchError(os.IsNotExist, "IsNotExist")),
 		"Failed to remove kubeconfig file %s", filepath.Join(clientcmd.RecommendedConfigDir, "test-config"))
 })
 
@@ -243,7 +243,7 @@ func threadUnsafeSetupTestNetworkNamespace() {
 	hostNamespaceNet, err := netlink.ParseIPNet(testNetNSCIDR)
 	Expect(err).NotTo(HaveOccurred(), "Failed to parse CIDR address %q", testNetNSCIDR)
 
-	seutpInterface := func(interfaceName string, net *net.IPNet) {
+	seutpInterface := func(interfaceName string, ipNet *net.IPNet) {
 		link, err := netlink.LinkByName(interfaceName)
 		Expect(err).NotTo(HaveOccurred(), "Failed to get link by name %q", interfaceName)
 
@@ -251,8 +251,8 @@ func threadUnsafeSetupTestNetworkNamespace() {
 		Expect(netlink.LinkSetUp(link)).To(Succeed(), "Failed to set link %q up", interfaceName)
 
 		// Add the IP address to the link
-		Expect(netlink.AddrAdd(link, &netlink.Addr{IPNet: net})).To(Succeed(),
-			"Failed to add address %q to link %q", net, interfaceName)
+		Expect(netlink.AddrAdd(link, &netlink.Addr{IPNet: ipNet})).To(Succeed(),
+			"Failed to add address %q to link %q", ipNet, interfaceName)
 	}
 	seutpInterface(vethLink.Name, hostNamespaceNet)
 

@@ -42,12 +42,12 @@ type NodeLinksReconciler struct {
 	recorder record.EventRecorder
 }
 
-func NewNodeLinksReconciler(cluster cluster.Cluster, nodeName string) *NodeLinksReconciler {
+func NewNodeLinksReconciler(k8sCluster cluster.Cluster, nodeName string) *NodeLinksReconciler {
 	return &NodeLinksReconciler{
-		Client:   cluster.GetClient(),
-		Scheme:   cluster.GetScheme(),
+		Client:   k8sCluster.GetClient(),
+		Scheme:   k8sCluster.GetScheme(),
 		nodeName: nodeName,
-		recorder: cluster.GetEventRecorderFor("nodelinks-controller"),
+		recorder: k8sCluster.GetEventRecorderFor("nodelinks-controller"),
 	}
 }
 
@@ -97,7 +97,7 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 				Reason:  "FinalizerUpdateFailed",
 				Message: fmt.Sprintf("Failed to update NodeLinks status with finalizer: %v", err),
 			}
-			return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, condition, err, "failed to update LiNodeLinksnk status with finalizer")
+			return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, condition, err, "failed to update NodeLinks status with finalizer")
 		}
 	}
 
@@ -225,16 +225,16 @@ func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNo
 }
 
 func (r *NodeLinksReconciler) getLinkResources(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) (map[string]*nodenetworkoperatorv1alpha1.Link, error) {
-	links := make(map[string]*nodenetworkoperatorv1alpha1.Link, len(nodeLinks.Spec.MatchingLinks))
+	linkResources := make(map[string]*nodenetworkoperatorv1alpha1.Link, len(nodeLinks.Spec.MatchingLinks))
 	for _, linkName := range pie.Unique(nodeLinks.Spec.MatchingLinks) {
 		var link nodenetworkoperatorv1alpha1.Link
 		if err := r.Get(ctx, client.ObjectKey{Name: linkName}, &link); err != nil {
 			return nil, fmt.Errorf("failed to get Link %q: %w", linkName, err)
 		}
-		links[link.Name] = &link
+		linkResources[link.Name] = &link
 	}
 
-	return links, nil
+	return linkResources, nil
 }
 
 // validateLinks validates the provided link resources. It returns an error if any validation fails. Validation cannot be corrected via reconciliation, so
@@ -325,7 +325,7 @@ func (r *NodeLinksReconciler) validateLinks(nodeLinks *nodenetworkoperatorv1alph
 // an order of operations for reconciling the links.
 // If a dependency is not listed in the provided link resources, dependents are still added to the graph, but the dependency is not.
 // Link configuration should be validated prior to calling this function.
-func (r *NodeLinksReconciler) buildDesiredLinkGraph(links map[string]*nodenetworkoperatorv1alpha1.Link) (graph.Graph[string, string], error) {
+func (r *NodeLinksReconciler) buildDesiredLinkGraph(linkResources map[string]*nodenetworkoperatorv1alpha1.Link) (graph.Graph[string, string], error) {
 	// Vertices are link resource names. Edges show dependencies, that is an edge from A -> B means that A is a dependency of dependent B.
 	// Calling `PreventCycles()` has negative performance implications, but the impact should be minimal because graphs will only have a few vertices,
 	// and significantly fewer edges. There shouldn't be any cycles created without a bug in the operator, but this is a safety measure, as some of
@@ -333,7 +333,7 @@ func (r *NodeLinksReconciler) buildDesiredLinkGraph(links map[string]*nodenetwor
 	g := graph.New(graph.StringHash, graph.Directed(), graph.Acyclic(), graph.PreventCycles())
 
 	// Add all vertices first
-	for linkName := range links {
+	for linkName := range linkResources {
 		if err := g.AddVertex(linkName); err != nil {
 			return nil, fmt.Errorf("failed to add vertex for Link %q: %w", linkName, err)
 		}
@@ -342,10 +342,10 @@ func (r *NodeLinksReconciler) buildDesiredLinkGraph(links map[string]*nodenetwor
 	// Add edges for dependencies
 	// Because the slice is sorted, it is trivial to track which links have been visited. For a given link name `linkToCheck`, and the current
 	// link `currentLink`, the `linkToCheck` link has been visited if and only if cmp.Less(linkToCheck, currentLink) is true.
-	linkNames := pie.Keys(links)
+	linkNames := pie.Keys(linkResources)
 	slices.Sort(linkNames)
 	for _, dependentLinkName := range linkNames {
-		link := links[dependentLinkName]
+		link := linkResources[dependentLinkName]
 		linkManager, err := r.getLinkManager(link)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get link manager for Link %q: %w", dependentLinkName, err)
@@ -675,8 +675,8 @@ func (r *NodeLinksReconciler) bringDownDependents(ctx context.Context, nodeLinks
 }
 
 // deleteUndesiredLinks removes links that are in the NodeLinks status but not in the desired state.
-func (r *NodeLinksReconciler) deleteUndesiredLinks(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
-	return r.deleteLinks(ctx, nodeLinks, r.getUndesiredLinks(nodeLinks, links))
+func (r *NodeLinksReconciler) deleteUndesiredLinks(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) error {
+	return r.deleteLinks(ctx, nodeLinks, r.getUndesiredLinks(nodeLinks, linkResources))
 }
 
 func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkNamesToRemove []string) error {
@@ -750,9 +750,9 @@ func (r *NodeLinksReconciler) deleteLinks(ctx context.Context, nodeLinks *nodene
 	return nil
 }
 
-func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) error {
-	desiredNetlinkLinkNames := make([]string, 0, len(links))
-	for _, link := range links {
+func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) error {
+	desiredNetlinkLinkNames := make([]string, 0, len(linkResources))
+	for _, link := range linkResources {
 		linkManager, err := r.getLinkManager(link)
 		if err != nil {
 			return fmt.Errorf("failed to get link manager for Link %q: %w", link.Name, err)
@@ -782,9 +782,9 @@ func (r *NodeLinksReconciler) updateLastAttemptedLinks(ctx context.Context, clus
 }
 
 // getUndesiredLinks returns the list of managed netlink link names that are deployed on the node but are not in the desired state.
-func (r *NodeLinksReconciler) getUndesiredLinks(nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, links map[string]*nodenetworkoperatorv1alpha1.Link) []string {
-	desiredNetlinkLinkNames := make([]string, 0, len(links))
-	for _, link := range links {
+func (r *NodeLinksReconciler) getUndesiredLinks(nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) []string {
+	desiredNetlinkLinkNames := make([]string, 0, len(linkResources))
+	for _, link := range linkResources {
 		desiredNetlinkLinkNames = append(desiredNetlinkLinkNames, link.Spec.LinkName)
 	}
 
@@ -861,8 +861,8 @@ func (r *NodeLinksReconciler) getLinkManager(link *nodenetworkoperatorv1alpha1.L
 // handleError handles errors during reconciliation, updating the Link status with the error condition.
 // If an error occurs while updating the conditions, it logs the error and fires an event with the error message.
 func (r *NodeLinksReconciler) handleError(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks, condition *metav1.Condition,
-	err error, msg string, args ...any) (ctrl.Result, error) {
-	logf.FromContext(ctx).Error(err, msg, args...)
+	err error, msg string) (ctrl.Result, error) {
+	logf.FromContext(ctx).Error(err, msg)
 
 	if condition != nil {
 		meta.SetStatusCondition(&nodeLinks.Status.Conditions, *condition)

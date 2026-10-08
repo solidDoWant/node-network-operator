@@ -39,11 +39,11 @@ type LinkReconciler struct {
 	recorder record.EventRecorder
 }
 
-func NewLinkReconciler(cluster cluster.Cluster) *LinkReconciler {
+func NewLinkReconciler(k8sCluster cluster.Cluster) *LinkReconciler {
 	return &LinkReconciler{
-		Client:   cluster.GetClient(),
-		Scheme:   cluster.GetScheme(),
-		recorder: cluster.GetEventRecorderFor("link-controller"),
+		Client:   k8sCluster.GetClient(),
+		Scheme:   k8sCluster.GetScheme(),
+		recorder: k8sCluster.GetEventRecorderFor("link-controller"),
 	}
 }
 
@@ -75,7 +75,7 @@ func (r *LinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	clusterStateLink := link.DeepCopy()
 
 	// Handle deletion
-	if !link.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !link.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, clusterStateLink, &link)
 	}
 
@@ -273,14 +273,14 @@ func (r *LinkReconciler) registerWithMatchedNodeLinks(ctx context.Context, clust
 	}
 
 	errs := pie.Map(matchedNodes, func(node corev1.Node) error {
-		return r.registerWithNodeLinks(ctx, clusterStateLink, link, node)
+		return r.registerWithNodeLinks(ctx, link, node)
 	})
 
 	return errors.Join(errs...)
 }
 
 // registerWithNodeLinks registers the link with the NodeLinks resource for the given node.
-func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link, node corev1.Node) error {
+func (r *LinkReconciler) registerWithNodeLinks(ctx context.Context, link *nodenetworkoperatorv1alpha1.Link, node corev1.Node) error {
 	nodeLinks := nodenetworkoperatorv1alpha1.NodeLinks{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: node.Name,

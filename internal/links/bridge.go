@@ -69,7 +69,7 @@ func (m *BridgeManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperat
 		return fmt.Errorf("failed to cast link %q to bridge", m.link.Spec.LinkName)
 	}
 
-	if m.link.Spec.Bridge.MTU != nil && bridge.LinkAttrs.MTU != int(*m.link.Spec.Bridge.MTU) {
+	if m.link.Spec.Bridge.MTU != nil && bridge.MTU != int(*m.link.Spec.Bridge.MTU) {
 		if err := netlink.LinkSetMTU(bridge, int(*m.link.Spec.Bridge.MTU)); err != nil {
 			return fmt.Errorf("failed to set MTU for bridge %q: %w", m.link.Spec.LinkName, err)
 		}

@@ -71,7 +71,8 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&nodeName, "node-name", "", "The name of the node this operator is running on.")
 	flag.BoolVar(&enableClusterWideControllers, "enable-cluster-wide-controllers", true,
-		"If set, controllers that watch cluster-wide resources (such as Links) will be enabled, provided that the pod is the leader (if leadership is enabled).")
+		"If set, controllers that watch cluster-wide resources (such as Links) will be enabled, "+
+			"provided that the pod is the leader (if leadership is enabled).")
 	flag.BoolVar(&enableNodeSpecificControllers, "enable-node-specific-controllers", true,
 		"If set, controllers that watch node-specific resources (such as NodeLinks) will be enabled.")
 	opts := zap.Options{
