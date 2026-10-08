@@ -350,39 +350,44 @@ func (r *LinkReconciler) handleError(ctx context.Context, clusterStateLink, link
 func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, link *nodenetworkoperatorv1alpha1.Link) error {
 	log := logf.FromContext(ctx)
 
-	// Determine whether the entire resource needs a patch or just the status
-	// Ignore status changes, these always need to be applied and will always differ
-	newStatus := link.Status.DeepCopy()
+	// Status is a subresource: the main endpoint ignores status changes, and the status endpoint ignores everything
+	// else. Patch each part that changed, the main resource first.
+	desiredStatus := link.Status.DeepCopy()
 	link.Status = clusterStateLink.Status
-	onlyStatusPatchIsNeeded := equality.Semantic.DeepEqual(clusterStateLink, link)
-	link.Status = *newStatus
+	if !equality.Semantic.DeepEqual(clusterStateLink, link) {
+		log.V(1).Info(fmt.Sprintf("updating full %T resource", clusterStateLink), "patchType", "full")
 
-	var err error
-	if onlyStatusPatchIsNeeded {
-		log = log.WithValues("patchType", "status")
-		log.V(1).Info(fmt.Sprintf("updating %T status resource only", clusterStateLink))
-		logf.IntoContext(ctx, log)
-
-		err = r.Status().Patch(ctx, link, client.MergeFrom(clusterStateLink))
-	} else {
-		log = log.WithValues("patchType", "full")
-		log.V(1).Info(fmt.Sprintf("updating full %T resource", clusterStateLink))
-		logf.IntoContext(ctx, log)
-
-		err = r.Patch(ctx, link, client.MergeFrom(clusterStateLink))
+		// On success, the response replaces link with the stored object, including its stored status.
+		if err := r.Patch(ctx, link, client.MergeFrom(clusterStateLink)); err != nil {
+			link.Status = *desiredStatus
+			return r.patchFailed(ctx, link, err)
+		}
+		*clusterStateLink = *link.DeepCopy()
 	}
+	link.Status = *desiredStatus
 
-	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to patch %T status", clusterStateLink))
-		r.recorder.Eventf(link, "Warning", "StatusUpdateFailed", "Failed to update %T status: %v", clusterStateLink, err)
-		return fmt.Errorf("failed to patch %T status: %w", clusterStateLink, err)
+	if !equality.Semantic.DeepEqual(clusterStateLink.Status, link.Status) {
+		log.V(1).Info(fmt.Sprintf("updating %T status resource only", clusterStateLink), "patchType", "status")
+
+		err := r.Status().Patch(ctx, link, client.MergeFrom(clusterStateLink))
+		// Removing the last finalizer of a resource that is being deleted removes the resource, leaving no status to patch.
+		if err != nil && !(apierrors.IsNotFound(err) && !link.DeletionTimestamp.IsZero()) {
+			return r.patchFailed(ctx, link, err)
+		}
 	}
 
 	// Update the clusterStateLink to reflect the new object state
 	*clusterStateLink = *link.DeepCopy()
 
-	log.V(1).Info(fmt.Sprintf("%T status updated", clusterStateLink))
+	log.V(1).Info(fmt.Sprintf("%T updated", clusterStateLink))
 	return nil
+}
+
+// patchFailed logs and records a failed patch, returning a wrapped error.
+func (r *LinkReconciler) patchFailed(ctx context.Context, link *nodenetworkoperatorv1alpha1.Link, err error) error {
+	logf.FromContext(ctx).Error(err, fmt.Sprintf("failed to patch %T", link))
+	r.recorder.Eventf(link, "Warning", "StatusUpdateFailed", "Failed to update %T: %v", link, err)
+	return fmt.Errorf("failed to patch %T: %w", link, err)
 }
 
 // SetupWithManager sets up the controller with the Manager.
