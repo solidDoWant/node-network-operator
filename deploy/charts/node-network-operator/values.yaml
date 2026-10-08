@@ -42,7 +42,10 @@ config:
     tag: "{{ .Chart.AppVersion }}"
 resources:
   # For schema, see
-  # https://raw.githubusercontent.com/bjw-s-labs/helm-charts/refs/tags/common-4.2.0/charts/library/common/values.schema.json
+  # https://raw.githubusercontent.com/bjw-s-labs/helm-charts/refs/tags/common-5.2.1/charts/library/common/values.schema.json
+  defaultPodOptions:
+    # The operator talks to the Kubernetes API with its service account token.
+    automountServiceAccountToken: true
   controllers:
     cluster:
       type: deployment
@@ -206,7 +209,7 @@ resources:
     webhook-server-cert:
       enabled: "{{ .Values.config.webhook.enableTLS }}"
       type: secret
-      name: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
+      name: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml | dig "_internal" "name" "" ) }}'
       defaultMode: 0440
       advancedMounts:
         cluster:
@@ -236,11 +239,14 @@ resources:
           port: 9973
   serviceMonitor:
     cluster:
+      # Keep the Prometheus job label set to the service name (the library defaults to the chart name).
+      jobLabel: app.kubernetes.io/service
       service:
         identifier: cluster-metrics
       endpoints:
         - port: http-metrics
     node:
+      jobLabel: app.kubernetes.io/service
       service:
         identifier: node-metrics
       endpoints:
@@ -265,6 +271,7 @@ resources:
           # Needed to omit events related to leader election
           - apiGroups:
               - ""
+              - events.k8s.io
             resources:
               - events
             verbs:
@@ -275,6 +282,7 @@ resources:
         rules:
           - apiGroups:
               - ""
+              - events.k8s.io
             resources:
               - events
             verbs:
@@ -329,6 +337,7 @@ resources:
         rules:
           - apiGroups:
               - ""
+              - events.k8s.io
             resources:
               - events
             verbs:
@@ -388,11 +397,11 @@ resources:
   rawResources:
     webhook-certificate:
       enabled: "{{ .Values.config.webhook.enableTLS }}"
-      apiVersion: cert-manager.io/v1
-      kind: Certificate
-      spec:
+      manifest:
+        apiVersion: cert-manager.io/v1
+        kind: Certificate
         spec:
-          secretName: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
+          secretName: '{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml | dig "_internal" "name" "" ) }}'
           dnsNames:
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc'
             - '{{ ( include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" . "id" "webhook") | fromYaml ).name }}.{{ .Release.Namespace }}.svc.{{ .Values.config.clusterDomain }}'
@@ -403,12 +412,13 @@ resources:
     validating-webhook-configuration-tls:
       enabled: "{{ .Values.config.webhook.enableTLS }}"
       forceRename: '{{ (include "bjw-s.common.lib.chart.names.fullname" .) }}-validating-webhook-configuration'
-      apiVersion: admissionregistration.k8s.io/v1
-      kind: ValidatingWebhookConfiguration
-      annotations:
-        cert-manager.io/inject-ca-from: '{{ .Release.Namespace }}/{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml ).name }}'
-      spec: &validating_webhook_spec
-        webhooks:
+      manifest:
+        apiVersion: admissionregistration.k8s.io/v1
+        kind: ValidatingWebhookConfiguration
+        metadata:
+          annotations:
+            cert-manager.io/inject-ca-from: '{{ .Release.Namespace }}/{{ ( include "bjw-s.common.lib.rawResource.getByIdentifier" (dict "rootContext" . "id" "webhook-certificate") | fromYaml | dig "_internal" "name" "" ) }}'
+        webhooks: &validating_webhooks
           - admissionReviewVersions:
               - v1
             clientConfig:
@@ -431,16 +441,16 @@ resources:
             sideEffects: None
     validating-webhook-configuration:
       enabled: "{{ not .Values.config.webhook.enableTLS }}"
-      apiVersion: admissionregistration.k8s.io/v1
-      kind: ValidatingWebhookConfiguration
-      spec:
-        <<: *validating_webhook_spec
+      manifest:
+        apiVersion: admissionregistration.k8s.io/v1
+        kind: ValidatingWebhookConfiguration
+        webhooks: *validating_webhooks
     cluster-pdb:
       enabled: "{{ .Values.config.clusterController.replicas | int | lt 1 }}"
       forceRename: '{{ (include "bjw-s.common.lib.chart.names.fullname" .) }}-cluster'
-      apiVersion: policy/v1
-      kind: PodDisruptionBudget
-      spec:
+      manifest:
+        apiVersion: policy/v1
+        kind: PodDisruptionBudget
         spec:
           minAvailable: 1
           unhealthyPodEvictionPolicy: AlwaysAllow
