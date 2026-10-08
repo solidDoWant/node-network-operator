@@ -229,7 +229,9 @@ func managerTests(metricsRequireSAToken bool) {
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("validating that the metrics service is available")
-			metricsServiceCmdOut, err := utils.Run(exec.Command("kubectl", "get", "service", "-l", "app.kubernetes.io/name=node-network-operator,app.kubernetes.io/component=metrics", "-n", namespace, "-o", "name"))
+			metricsServiceCmdOut, err := utils.Run(exec.Command("kubectl", "get", "service",
+				"-l", "app.kubernetes.io/name=node-network-operator,app.kubernetes.io/component=metrics",
+				"-n", namespace, "-o", "name"))
 			Expect(err).NotTo(HaveOccurred(), "Metrics service(s) should exist")
 			metricsServiceNames := utils.GetNonEmptyLines(metricsServiceCmdOut)
 			Expect(metricsServiceNames).NotTo(BeEmpty(), "No metrics services found")
@@ -238,7 +240,8 @@ func managerTests(metricsRequireSAToken bool) {
 			for _, metricsServiceName := range metricsServiceNames {
 				Eventually(func(g Gomega) {
 					metricsServiceName := strings.TrimPrefix(metricsServiceName, "service/")
-					output, err := utils.Run(exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace, "-o", "go-template={{ range .subsets }}{{ range .addresses }}{{ .ip }}{{ \"\\n\" }}{{ end }}{{ end }}"))
+					output, err := utils.Run(exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace,
+						"-o", "go-template={{ range .subsets }}{{ range .addresses }}{{ .ip }}{{ \"\\n\" }}{{ end }}{{ end }}"))
 					g.Expect(err).NotTo(HaveOccurred())
 					// Skip the "endpointslice" warning
 					g.Expect(utils.GetNonEmptyLines(output)[1:]).To(HaveLen(2), "Metrics endpoints is not ready or otherwise missing")
@@ -288,7 +291,8 @@ func managerTests(metricsRequireSAToken bool) {
 			for _, metricsServiceName := range metricsServiceNames {
 				func() {
 					By("getting the service metrics port number")
-					port, err := utils.Run(exec.Command("kubectl", "get", metricsServiceName, "-n", namespace, "-o", "jsonpath={.spec.ports[?(@.name==\"https-metrics\")].port}{.spec.ports[?(@.name==\"http-metrics\")].port}"))
+					port, err := utils.Run(exec.Command("kubectl", "get", metricsServiceName, "-n", namespace, "-o",
+						"jsonpath={.spec.ports[?(@.name==\"https-metrics\")].port}{.spec.ports[?(@.name==\"http-metrics\")].port}"))
 					Expect(err).NotTo(HaveOccurred(), "Failed to get metrics service port")
 					Expect(port).NotTo(BeEmpty(), "Metrics service port is empty")
 
@@ -390,7 +394,8 @@ func managerTests(metricsRequireSAToken bool) {
 
 			By("validating that the Link resource is created")
 			Eventually(func(g Gomega) {
-				isReady, err := utils.Run(exec.Command("kubectl", "get", "link", "link-sample", "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
+				isReady, err := utils.Run(exec.Command("kubectl", "get", "link", "link-sample",
+					"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to get Link resource")
 				g.Expect(isReady).To(Equal("True"), "Link resource should be ready")
 			}).Should(Succeed())
@@ -398,7 +403,8 @@ func managerTests(metricsRequireSAToken bool) {
 			By("validating that the NodeLinks resource succeeds")
 			Expect(utils.ForEachNode(func(node string) error {
 				Eventually(func(g Gomega) {
-					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
+					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node,
+						"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
 					g.Expect(isReady).To(Equal("True"), "NodeLinks resource should be ready")
 
@@ -416,11 +422,12 @@ func managerTests(metricsRequireSAToken bool) {
 
 			By("validating that the Link resource change is applied")
 			Expect(utils.ForEachNode(func(node string) error {
-				ipLinkOutput, err := utils.Run(exec.Command("docker", "container", "exec", node, "ip", "link", "show", "sampleBridge1"))
+				ipLinkOutput, err := utils.Run(exec.Command("docker", "container", "exec", node,
+					"ip", "link", "show", "sampleBridge1"))
 				Expect(err).NotTo(HaveOccurred(), "Failed to get link details on node")
 				Expect(ipLinkOutput).To(ContainSubstring("mtu 1400"), "Link MTU not updated")
 				return nil
-			}))
+			})).To(Succeed())
 
 			By("deploying multiple unmanaged Link resources that refer to the same link name")
 			_, err = utils.Run(exec.Command("kubectl", "apply", "-f", "test/e2e/manifests/unmanaged.yaml"))
@@ -433,22 +440,25 @@ func managerTests(metricsRequireSAToken bool) {
 			}()
 
 			By("validating that all NodeLinks resources succeed")
-			utils.ForEachNode(func(node string) error {
+			Expect(utils.ForEachNode(func(node string) error {
 				Eventually(func(g Gomega) {
-					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
-					Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
-					Expect(isReady).To(Equal("True"), "NodeLinks resource should be ready")
+					isReady, err := utils.Run(exec.Command("kubectl", "get", "nodelinks", node,
+						"-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}"))
+					g.Expect(err).NotTo(HaveOccurred(), "Failed to get NodeLinks resource")
+					g.Expect(isReady).To(Equal("True"), "NodeLinks resource should be ready")
 				}, 5*time.Second).Should(Succeed())
 				return nil
-			})
+			})).To(Succeed())
 		})
 
 		Context("gateway-network samples", func() {
 			BeforeAll(func() {
 				By("adding a KIND-specific iptables rule to allow traffic to the gateway-network router pod")
 				Expect(utils.ForEachNode(func(nodeName string) error {
-					// TODO NOTE: The following iptables rule is needed due to the kind CNI plugin to avoid masquerading the gateway bridge traffic
-					// iptables -t nat -I KIND-MASQ-AGENT 1 -s 192.168.50.0/24 -m comment --comment "multus: gateway pod network is not subject to MASQUERADE" -j RETURN
+					// TODO NOTE: The following iptables rule is needed due to the kind CNI plugin to avoid masquerading the
+					// gateway bridge traffic:
+					// iptables -t nat -I KIND-MASQ-AGENT 1 -s 192.168.50.0/24 \
+					//   -m comment --comment "multus: gateway pod network is not subject to MASQUERADE" -j RETURN
 					cmd := exec.Command(
 						"docker", "container", "exec", nodeName,
 						"iptables",
@@ -494,7 +504,8 @@ func managerTests(metricsRequireSAToken bool) {
 			AfterEach(func() {
 				By("validating that the client-pod is running")
 				Eventually(func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "pod", "client-pod", "-n", gatewayNetworkNamespace, "-o", "jsonpath={.status.phase}")
+					cmd := exec.Command("kubectl", "get", "pod", "client-pod", "-n", gatewayNetworkNamespace,
+						"-o", "jsonpath={.status.phase}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to get client-pod status")
 					g.Expect(output).To(Equal("Running"), "client-pod should be running")
@@ -502,23 +513,26 @@ func managerTests(metricsRequireSAToken bool) {
 
 				By("validating that the router-pod is running")
 				Eventually(func(g Gomega) {
-					cmd := exec.Command("kubectl", "get", "pod", "router-pod", "-n", gatewayNetworkNamespace, "-o", "jsonpath={.status.phase}")
+					cmd := exec.Command("kubectl", "get", "pod", "router-pod", "-n", gatewayNetworkNamespace,
+						"-o", "jsonpath={.status.phase}")
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred(), "Failed to get router-pod status")
 					g.Expect(output).To(Equal("Running"), "router-pod should be running")
 				}, 2*time.Minute).Should(Succeed())
 
 				By("validating that the client-pod can ping the router-pod")
-				_, err := utils.Run(exec.Command("kubectl", "exec", "-n", gatewayNetworkNamespace, "client-pod", "--", "ping", "-c", "3", "192.168.50.1"))
+				_, err := utils.Run(exec.Command("kubectl", "exec", "-n", gatewayNetworkNamespace, "client-pod", "--",
+					"ping", "-c", "3", "192.168.50.1"))
 				Expect(err).NotTo(HaveOccurred(), "client-pod should be able to ping the router-pod")
 
 				By("validating that the router-pod can reach the external network")
-				_, err = utils.Run(exec.Command("kubectl", "exec", "-n", gatewayNetworkNamespace, "client-pod", "--", "ping", "-c", "3", "1.1.1.1"))
+				_, err = utils.Run(exec.Command("kubectl", "exec", "-n", gatewayNetworkNamespace, "client-pod", "--",
+					"ping", "-c", "3", "1.1.1.1"))
 				Expect(err).NotTo(HaveOccurred(), "router-pod should be able to reach the external network")
 			})
 
-			It("can be deployed in single-node configuration", func() {
-				sampleDir := filepath.Join("config", "samples", "gateway-network", "single-node")
+			deploySample := func(configuration string) {
+				sampleDir := filepath.Join("config", "samples", "gateway-network", configuration)
 				_, err := utils.Run(exec.Command("kubectl", "apply", "-n", gatewayNetworkNamespace, "-k", sampleDir))
 				Expect(err).NotTo(HaveOccurred(), "Failed to apply gateway-network sample")
 
@@ -530,9 +544,11 @@ func managerTests(metricsRequireSAToken bool) {
 					// Wait for the resources to be deleted
 					Eventually(func(g Gomega) {
 						// NetworkAttachmentDefinition resources
-						_, err := utils.Run(exec.Command("kubectl", "get", "-n", gatewayNetworkNamespace, "net-attach-def", "gateway-network-client-pods"))
+						_, err := utils.Run(exec.Command("kubectl", "get", "-n", gatewayNetworkNamespace,
+							"net-attach-def", "gateway-network-client-pods"))
 						g.Expect(err).To(HaveOccurred(), "NetworkAttachmentDefinition resource should be deleted")
-						_, err = utils.Run(exec.Command("kubectl", "get", "-n", gatewayNetworkNamespace, "net-attach-def", "gateway-network-router-pod"))
+						_, err = utils.Run(exec.Command("kubectl", "get", "-n", gatewayNetworkNamespace,
+							"net-attach-def", "gateway-network-router-pod"))
 						g.Expect(err).To(HaveOccurred(), "NetworkAttachmentDefinition resource should be deleted")
 
 						// Pods
@@ -542,33 +558,14 @@ func managerTests(metricsRequireSAToken bool) {
 						g.Expect(err).To(HaveOccurred(), "Router pod should be deleted")
 					}).Should(Succeed())
 				})
+			}
+
+			It("can be deployed in single-node configuration", func() {
+				deploySample("single-node")
 			})
 
 			It("can be deployed in multi-node configuration", func() {
-				sampleDir := filepath.Join("config", "samples", "gateway-network", "multi-node")
-				_, err := utils.Run(exec.Command("kubectl", "apply", "-n", gatewayNetworkNamespace, "-k", sampleDir))
-				Expect(err).NotTo(HaveOccurred(), "Failed to apply gateway-network sample")
-
-				DeferCleanup(func() {
-					By("deleting the gateway-network sample")
-					_, err := utils.Run(exec.Command("kubectl", "delete", "-n", gatewayNetworkNamespace, "-k", sampleDir))
-					Expect(err).NotTo(HaveOccurred(), "Failed to delete gateway-network sample")
-
-					// Wait for the resources to be deleted
-					Eventually(func(g Gomega) {
-						// NetworkAttachmentDefinition resources
-						_, err := utils.Run(exec.Command("kubectl", "get", "-n", gatewayNetworkNamespace, "net-attach-def", "gateway-network-client-pods"))
-						g.Expect(err).To(HaveOccurred(), "NetworkAttachmentDefinition resource should be deleted")
-						_, err = utils.Run(exec.Command("kubectl", "get", "-n", gatewayNetworkNamespace, "net-attach-def", "gateway-network-router-pod"))
-						g.Expect(err).To(HaveOccurred(), "NetworkAttachmentDefinition resource should be deleted")
-
-						// Pods
-						_, err = utils.Run(exec.Command("kubectl", "get", "pod", "-n", gatewayNetworkNamespace, "client-pod"))
-						g.Expect(err).To(HaveOccurred(), "Client pod should be deleted")
-						_, err = utils.Run(exec.Command("kubectl", "get", "pod", "-n", gatewayNetworkNamespace, "router-pod"))
-						g.Expect(err).To(HaveOccurred(), "Router pod should be deleted")
-					}).Should(Succeed())
-				})
+				deploySample("multi-node")
 			})
 		})
 	})

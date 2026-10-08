@@ -59,11 +59,11 @@ func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetwor
 		return false, fmt.Errorf("link %q is not a vxlan link", m.link.Spec.LinkName)
 	}
 
-	if m.link.Spec.VXLAN.MTU != nil && vxlanLink.LinkAttrs.MTU != int(*m.link.Spec.VXLAN.MTU) {
+	if m.link.Spec.VXLAN.MTU != nil && vxlanLink.MTU != int(*m.link.Spec.VXLAN.MTU) {
 		return true, nil
 	}
 
-	needsUpdate, err := doesLinkRefNeedUpdate(m.link.Spec.VXLAN.Master, vxlanLink.LinkAttrs.MasterIndex, links)
+	needsUpdate, err := doesLinkRefNeedUpdate(m.link.Spec.VXLAN.Master, vxlanLink.MasterIndex, links)
 	if err != nil {
 		return false, fmt.Errorf("failed to check if master link needs update: %w", err)
 	}
@@ -125,7 +125,7 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 		return fmt.Errorf("failed to cast link %q to vxlan", m.link.Spec.LinkName)
 	}
 
-	if m.link.Spec.VXLAN.MTU != nil && vxlan.LinkAttrs.MTU != int(*m.link.Spec.VXLAN.MTU) {
+	if m.link.Spec.VXLAN.MTU != nil && vxlan.MTU != int(*m.link.Spec.VXLAN.MTU) {
 		if err := netlink.LinkSetMTU(vxlan, int(*m.link.Spec.VXLAN.MTU)); err != nil {
 			return fmt.Errorf("failed to set MTU for vxlan %q: %w", m.link.Spec.LinkName, err)
 		}
@@ -161,7 +161,7 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 		}
 	}
 
-	needsUpdate, err = doesLinkRefNeedUpdate(m.link.Spec.VXLAN.Master, vxlan.LinkAttrs.MasterIndex, links)
+	needsUpdate, err = doesLinkRefNeedUpdate(m.link.Spec.VXLAN.Master, vxlan.MasterIndex, links)
 	if err != nil {
 		return fmt.Errorf("failed to check if master link needs update: %w", err)
 	}

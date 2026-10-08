@@ -13,6 +13,9 @@ import (
 	"github.com/solidDoWant/node-network-operator/test/utils"
 )
 
+// envTrue is the value that enables a boolean environment variable.
+const envTrue = "true"
+
 var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
@@ -20,31 +23,31 @@ var (
 
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
-	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == envTrue
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
 	// These variables are useful if multus is already installed, avoiding
 	// re-installation and conflicts.
-	skipMultusInstall = os.Getenv("MULTUS_INSTALL_SKIP") == "true"
+	skipMultusInstall = os.Getenv("MULTUS_INSTALL_SKIP") == envTrue
 	// isMultusAlreadyInstalled will be set true when Multus CRDs be found on the cluster
 	isMultusAlreadyInstalled = false
 
 	// These variables are useful if whereabouts is already installed, avoiding
 	// re-installation and conflicts.
-	skipWhereaboutsInstall = os.Getenv("WHEREABOUTS_INSTALL_SKIP") == "true"
+	skipWhereaboutsInstall = os.Getenv("WHEREABOUTS_INSTALL_SKIP") == envTrue
 	// isWhereaboutsAlreadyInstalled will be set true when Whereabouts CRDs be found on the cluster
 	isWhereaboutsAlreadyInstalled = false
 
 	// These variables are useful if the basic CNI plugins are already installed, avoiding
 	// re-installation and conflicts.
-	skipCNIPluginsInstall = os.Getenv("CNI_PLUGINS_INSTALL_SKIP") == "true"
+	skipCNIPluginsInstall = os.Getenv("CNI_PLUGINS_INSTALL_SKIP") == envTrue
 	// isCNIPluginsAlreadyInstalled will be set true when basic CNI plugins DaemonSet be found on the cluster
 	isCNIPluginsAlreadyInstalled = false
 
 	// These variables are useful if the prometheus operator is already installed, avoiding
 	// re-installation and conflicts.
-	skipPrometheusInstall = os.Getenv("PROMETHEUS_INSTALL_SKIP") == "true"
+	skipPrometheusInstall = os.Getenv("PROMETHEUS_INSTALL_SKIP") == envTrue
 	// isPrometheusAlreadyInstalled will be set true when Prometheus CRDs be found on the cluster
 	isPrometheusAlreadyInstalled = false
 
@@ -70,7 +73,7 @@ var _ = BeforeSuite(func() {
 		kindClusterName, err := utils.Run(exec.Command("make", "print-kind-cluster-name"))
 		Expect(err).NotTo(HaveOccurred(), "Failed to get the kind cluster name")
 		Expect(kindClusterName).NotTo(BeEmpty(), "Kind cluster name should not be empty")
-		os.Setenv("KIND_CLUSTER", kindClusterName)
+		Expect(os.Setenv("KIND_CLUSTER", kindClusterName)).To(Succeed(), "Failed to set KIND_CLUSTER")
 	}
 
 	By("building the manager(Operator) image")
@@ -85,7 +88,8 @@ var _ = BeforeSuite(func() {
 	projectImage = imageTag
 
 	By("loading the manager(Operator) image on Kind")
-	Eventually(utils.LoadImageToKindClusterWithName(projectImage)).Should(Succeed(), "Failed to load the manager(Operator) image into Kind")
+	Eventually(utils.LoadImageToKindClusterWithName).WithArguments(projectImage).
+		Should(Succeed(), "Failed to load the manager(Operator) image into Kind")
 
 	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
 	// To prevent errors when tests run in environments with CertManager already installed,

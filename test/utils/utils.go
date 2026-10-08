@@ -21,7 +21,8 @@ const (
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
 	multusVersion = "v4.2.2"
-	multusURLTmpl = "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/refs/tags/%s/deployments/multus-daemonset-thick.yml"
+	multusURLTmpl = "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/refs/tags/%s/" +
+		"deployments/multus-daemonset-thick.yml"
 
 	whereaboutsVersion = "v0.9.2"
 	whereaboutsURL     = "https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/refs/tags/%s/doc/crds/%s"
@@ -328,7 +329,8 @@ func InstallSelfSignedIssuer() error {
 
 // UninstallSelfSignedIssuer uninstalls the self-signed issuer
 func UninstallSelfSignedIssuer() {
-	if _, err := Run(exec.Command("kubectl", "delete", "-f", "test/utils/manifests/selfsigned-issuer/issuer.yaml")); err != nil {
+	issuerManifest := "test/utils/manifests/selfsigned-issuer/issuer.yaml"
+	if _, err := Run(exec.Command("kubectl", "delete", "-f", issuerManifest)); err != nil {
 		warnError(err)
 	}
 }

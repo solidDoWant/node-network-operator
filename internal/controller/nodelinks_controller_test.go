@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +47,7 @@ var _ = Describe("NodeLinks Controller", func() {
 			// Clean up any existing node first
 			existingNode := &corev1.Node{}
 			if k8sClient.Get(ctx, typeNamespacedName, existingNode) == nil {
-				k8sClient.Delete(ctx, existingNode)
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, existingNode))).To(Succeed())
 			}
 			Expect(k8sClient.Create(ctx, node)).To(Succeed(), "Failed to create node %s", nodeName)
 
@@ -71,8 +72,8 @@ var _ = Describe("NodeLinks Controller", func() {
 			existingLink := &nodenetworkoperatorv1alpha1.Link{}
 			if k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, existingLink) == nil {
 				existingLink.Finalizers = nil
-				k8sClient.Update(ctx, existingLink)
-				k8sClient.Delete(ctx, existingLink)
+				Expect(client.IgnoreNotFound(k8sClient.Update(ctx, existingLink))).To(Succeed())
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, existingLink))).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: linkName}, existingLink)
 				}).ShouldNot(Succeed())
@@ -96,8 +97,8 @@ var _ = Describe("NodeLinks Controller", func() {
 			existingNodeLinks := &nodenetworkoperatorv1alpha1.NodeLinks{}
 			if k8sClient.Get(ctx, typeNamespacedName, existingNodeLinks) == nil {
 				existingNodeLinks.Finalizers = nil
-				k8sClient.Update(ctx, existingNodeLinks)
-				k8sClient.Delete(ctx, existingNodeLinks)
+				Expect(client.IgnoreNotFound(k8sClient.Update(ctx, existingNodeLinks))).To(Succeed())
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, existingNodeLinks))).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(ctx, typeNamespacedName, existingNodeLinks)
 				}).ShouldNot(Succeed())
