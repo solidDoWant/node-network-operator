@@ -60,30 +60,50 @@
       versioning: "regex:^(?<build>\\d+)-(?<major>\\d+)\\.(?<minor>\\d+)-(?<compatibility>[a-z]+)$",
     },
 
-    // --- Groups (one PR for components that must move together) ------------
+    // --- Groups -----------------------------------------------------------------
+    // Updates are applied in occasional batches, so group liberally: one PR per ecosystem. Majors still get their
+    // own PR per group and need Dependency Dashboard approval. additionalBranchPrefix "" keeps 0.x minors (most
+    // Kubernetes Go modules) on the group branch; the preset otherwise moves them to a separate major- branch.
     {
-      description: "Kubernetes libraries and controller-runtime: controller-runtime minors target a Kubernetes minor",
-      groupName: "kubernetes",
-      matchDatasources: ["go"],
-      matchPackageNames: ["k8s.io/**", "sigs.k8s.io/controller-runtime"],
-      group: { commitMessageTopic: "{{{groupName}}} group" },
+      description: "Go: modules, the go directive, and Go-based build tools in the Makefile",
+      groupName: "go",
+      matchDatasources: ["go", "golang-version"],
+      additionalBranchPrefix: "",
+      group: { commitMessageTopic: "{{{groupName}}} dependencies" },
     },
     {
-      groupName: "ginkgo",
-      matchDatasources: ["go"],
-      matchPackageNames: ["github.com/onsi/ginkgo/v2", "github.com/onsi/gomega"],
-      group: { commitMessageTopic: "{{{groupName}}} group" },
+      description: "Container images: devcontainer base image and features",
+      groupName: "container images",
+      matchDatasources: ["docker"],
+      additionalBranchPrefix: "",
+      group: { commitMessageTopic: "{{{groupName}}}" },
     },
     {
-      groupName: "netlink",
-      matchDatasources: ["go"],
-      matchPackageNames: ["github.com/vishvananda/netlink", "github.com/vishvananda/netns"],
-      group: { commitMessageTopic: "{{{groupName}}} group" },
+      description: "Helm chart dependencies",
+      groupName: "helm",
+      matchDatasources: ["helm"],
+      additionalBranchPrefix: "",
+      group: { commitMessageTopic: "{{{groupName}}} dependencies" },
     },
     {
-      description: "e2e test dependencies (cluster add-ons installed by the e2e suite)",
+      description: "Repo tooling: schema generation and the Renovate presets",
+      groupName: "tooling",
+      matchDatasources: ["pypi", "git-refs"],
+      additionalBranchPrefix: "",
+      group: { commitMessageTopic: "{{{groupName}}} dependencies" },
+    },
+    {
+      description: "Renovate presets (separate rule: the preset reference is matched by manager, not datasource)",
+      groupName: "tooling",
+      matchManagers: ["renovate-config"],
+      additionalBranchPrefix: "",
+      group: { commitMessageTopic: "{{{groupName}}} dependencies" },
+    },
+    {
+      description: "e2e test dependencies: cluster add-ons and images used by the e2e suite. Last so it wins for test/.",
       groupName: "e2e dependencies",
       matchFileNames: ["test/**"],
+      additionalBranchPrefix: "",
       group: { commitMessageTopic: "{{{groupName}}}" },
     },
 
