@@ -12,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/strings/slices"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -328,5 +330,72 @@ var _ = Describe("Link Controller", func() {
 			Entry("missing vnid", nodenetworkoperatorv1alpha1.VXLANSpecs{RemoteIPAddress: "10.255.0.1"}, "vnid"),
 			Entry("missing remoteIPAddress", nodenetworkoperatorv1alpha1.VXLANSpecs{VNID: 4244}, "remoteIPAddress"),
 		)
+	})
+
+	Context("When the node of a NodeLinks resource is deleted", func() {
+		const nodeName = "test-deleted-node"
+		const linkName = "test-single-link"
+
+		ctx := context.Background()
+		nodeLinksKey := types.NamespacedName{Name: nodeName}
+		linkRequest := reconcile.Request{NamespacedName: types.NamespacedName{Name: linkName}}
+
+		AfterEach(func() {
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			if err := k8sClient.Get(ctx, nodeLinksKey, &nodeLinks); err == nil {
+				nodeLinks.Finalizers = nil
+				Expect(client.IgnoreNotFound(k8sClient.Update(ctx, &nodeLinks))).To(Succeed())
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &nodeLinks))).To(Succeed())
+			}
+
+			var link nodenetworkoperatorv1alpha1.Link
+			if err := k8sClient.Get(ctx, linkRequest.NamespacedName, &link); err == nil {
+				Expect(k8sClient.Delete(ctx, &link)).To(Succeed())
+				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
+			}
+
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, node))).To(Succeed())
+		})
+
+		It("should finish deleting the NodeLinks when it has a single matching link", func() {
+			By("creating a node and a link that matches it")
+			Expect(k8sClient.Create(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: linkName},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName:  "test-br0",
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{Bridge: &nodenetworkoperatorv1alpha1.BridgeSpec{}},
+				},
+			})).To(Succeed())
+			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
+
+			By("adding the node agent's finalizer to the NodeLinks")
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			Expect(k8sClient.Get(ctx, nodeLinksKey, &nodeLinks)).To(Succeed())
+			Expect(nodeLinks.Spec.MatchingLinks).To(ConsistOf(linkName))
+			clusterStateNodeLinks := nodeLinks.DeepCopy()
+			controllerutil.AddFinalizer(&nodeLinks, nodeLinksFinalizerName)
+			Expect(k8sClient.Patch(ctx, &nodeLinks, client.MergeFrom(clusterStateNodeLinks))).To(Succeed())
+
+			By("deleting the node, and marking its NodeLinks for deletion as the garbage collector would")
+			// envtest does not run the garbage collector, so the owned NodeLinks is deleted explicitly.
+			Expect(k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &nodeLinks)).To(Succeed())
+
+			By("reconciling the link")
+			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
+
+			By("verifying the NodeLinks was removed")
+			err := k8sClient.Get(ctx, nodeLinksKey, &nodeLinks)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "NodeLinks of a deleted node should be removed, got: %v (finalizers: %v)", err, nodeLinks.Finalizers)
+
+			By("verifying a node that rejoins with the same name gets a new NodeLinks")
+			Expect(k8sClient.Create(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}})).To(Succeed())
+			Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, linkRequest)).To(Equal(reconcile.Result{}))
+			Expect(k8sClient.Get(ctx, nodeLinksKey, &nodeLinks)).To(Succeed())
+			Expect(nodeLinks.DeletionTimestamp.IsZero()).To(BeTrue(), "The new NodeLinks should not be pending deletion")
+			Expect(nodeLinks.Spec.MatchingLinks).To(ConsistOf(linkName))
+		})
 	})
 })
