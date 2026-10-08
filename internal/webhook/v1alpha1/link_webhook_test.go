@@ -9,6 +9,9 @@ import (
 )
 
 var _ = Describe("Link Webhook", func() {
+	const selectorKey = "some-key"
+	const selectorValue = "some-value"
+
 	var (
 		obj       *nodenetworkoperatorv1alpha1.Link
 		oldObj    *nodenetworkoperatorv1alpha1.Link
@@ -30,9 +33,9 @@ var _ = Describe("Link Webhook", func() {
 			obj.Spec.NodeSelector = v1.LabelSelector{
 				MatchExpressions: []v1.LabelSelectorRequirement{
 					{
-						Key: "some-key",
+						Key: selectorKey,
 						Values: []string{
-							"some-value",
+							selectorValue,
 						},
 						Operator: "invalid operator value",
 					},
@@ -46,9 +49,9 @@ var _ = Describe("Link Webhook", func() {
 			obj.Spec.NodeSelector = v1.LabelSelector{
 				MatchExpressions: []v1.LabelSelectorRequirement{
 					{
-						Key: "some-key",
+						Key: selectorKey,
 						Values: []string{
-							"some-value",
+							selectorValue,
 						},
 						Operator: v1.LabelSelectorOpIn,
 					},
@@ -62,9 +65,9 @@ var _ = Describe("Link Webhook", func() {
 			obj.Spec.NodeSelector = v1.LabelSelector{
 				MatchExpressions: []v1.LabelSelectorRequirement{
 					{
-						Key: "some-key",
+						Key: selectorKey,
 						Values: []string{
-							"some-value",
+							selectorValue,
 						},
 						Operator: "invalid operator value",
 					},
@@ -76,9 +79,9 @@ var _ = Describe("Link Webhook", func() {
 			obj.Spec.NodeSelector = v1.LabelSelector{
 				MatchExpressions: []v1.LabelSelectorRequirement{
 					{
-						Key: "some-key",
+						Key: selectorKey,
 						Values: []string{
-							"some-value",
+							selectorValue,
 						},
 						Operator: v1.LabelSelectorOpIn,
 					},

@@ -78,7 +78,7 @@ vet: ## Run go vet against code.
 
 .PHONY: check-licenses
 check-licenses: ## Check licenses of dependencies.
-	@go run github.com/google/go-licenses@latest report ./...
+	@go run github.com/google/go-licenses/v2@$(GO_LICENSES_VERSION) report ./...
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest $(GINKGO) ## Run tests.
@@ -162,7 +162,7 @@ $(BUILT_LICENSES) &: go.mod LICENSE
 	@mkdir -p "$(LICENSE_DIR)"
 	@cp LICENSE "$(LICENSE_DIR)"
 	@rm -rf "$(GO_DEPENDENCIES_LICENSE_DIR)"
-	@go run github.com/google/go-licenses@latest save ./... --save_path="$(GO_DEPENDENCIES_LICENSE_DIR)" --ignore "$(MODULE_NAME)"
+	@go run github.com/google/go-licenses/v2@$(GO_LICENSES_VERSION) save ./... --save_path="$(GO_DEPENDENCIES_LICENSE_DIR)" --ignore "$(MODULE_NAME)"
 
 ALL_BUILDERS += licenses
 .PHONY: licenses
@@ -303,12 +303,13 @@ print-localbin:
 	@echo $(LOCALBIN)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.6.0
+KUSTOMIZE_VERSION ?= v5.8.3
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.1.0
+GOLANGCI_LINT_VERSION ?= v2.14.0
+GO_LICENSES_VERSION ?= v2.0.1
 GINKGO_VERSION ?= $(shell go list -m -f "{{ .Version }}" github.com/onsi/ginkgo/v2)
 
 .PHONY: kustomize

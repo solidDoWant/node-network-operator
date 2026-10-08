@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -86,13 +86,15 @@ var _ = Describe("Link Controller", func() {
 	Context("When reconciling resources with nodes", func() {
 		const resourceNamePrefix = "test-resource-"
 		const nodeNamePrefix = "test-node-"
+		const exactLabel = "exactLabel"
+		const exactValue = "exactValue"
 
 		ctx := context.Background()
 
 		nodeLabels := []map[string]string{
-			{},                           // Match the first resource's NodeSelector
-			{"exactLabel": "exactValue"}, // Match the first resource's NodeSelector
-			{"exactLabel": "exactValue", "matchLabel": "value1"}, // Match both resources' NodeSelector
+			{},                       // Match the first resource's NodeSelector
+			{exactLabel: exactValue}, // Match the first resource's NodeSelector
+			{exactLabel: exactValue, "matchLabel": "value1"}, // Match both resources' NodeSelector
 		}
 
 		nodes := make([]*corev1.Node, len(nodeLabels))
@@ -127,7 +129,7 @@ var _ = Describe("Link Controller", func() {
 				resourceSpec: nodenetworkoperatorv1alpha1.LinkSpec{
 					LinkName: "test-vxlan1",
 					NodeSelector: metav1.LabelSelector{
-						MatchLabels: map[string]string{"exactLabel": "exactValue"},
+						MatchLabels: map[string]string{exactLabel: exactValue},
 						MatchExpressions: []metav1.LabelSelectorRequirement{
 							{
 								Key:      "matchLabel",
@@ -288,7 +290,7 @@ var _ = Describe("Link Controller", func() {
 				By(fmt.Sprintf("Verifying the resource %s updates after node deletion", name))
 				var resource nodenetworkoperatorv1alpha1.Link
 				Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s after node deletion", name)
-				expectedMatchedNodes := slices.Filter(nil, link.expectedMatchedNodes, func(nodeName string) bool { return nodeName != nodeToDelete.Name })
+				expectedMatchedNodes := slices.DeleteFunc(slices.Clone(link.expectedMatchedNodes), func(nodeName string) bool { return nodeName == nodeToDelete.Name })
 				Expect(resource.Status.MatchedNodes).To(ConsistOf(expectedMatchedNodes), "The MatchedNodes should not contain the deleted node %s for resource %s", nodeToDelete.Name, name)
 			}
 

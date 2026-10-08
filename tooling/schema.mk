@@ -2,7 +2,7 @@ THIS_MAKEFILE_DIRECTORY = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 SCHEMAGEN_DIR = $(abspath $(THIS_MAKEFILE_DIRECTORY)/schema-gen)
 OPENAPI2JSONSCHEMA = $(SCHEMAGEN_DIR)/openapi2jsonschema.py
-OPENAPI2JSONSCHEMA_VERSION = 781c133dcebed26c2701701f5090aaf36991e7b8
+OPENAPI2JSONSCHEMA_VERSION = 63669a570e231d4f1f8396d229a1de512bcf0a34
 
 CRD_DIR = $(abspath $(THIS_MAKEFILE_DIRECTORY)../config/crd/bases/)
 CRD_FILES = $(shell find "$(CRD_DIR)" -name '*.yaml' -type f)
