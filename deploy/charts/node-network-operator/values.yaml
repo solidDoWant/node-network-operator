@@ -20,6 +20,21 @@ config:
   # Let me know if you're doing this - I'd like to know how I can improve the operator to better support this use case.
   noRequireCNI: false
   clusterDomain: cluster.local
+  # Logging options for all operator containers. Unset options are not passed, so the operator's defaults apply
+  # (development mode: console encoder, debug level, stacktraces on warnings).
+  logging:
+    # Enable development mode defaults (--zap-devel). Production mode defaults to the json encoder, info level,
+    # and stacktraces on errors.
+    development: null
+    # Log level (--zap-log-level): one of debug, info, error, panic, or an integer greater than 0 for increased
+    # verbosity.
+    level: ""
+    # Log format (--zap-encoder): one of json or console.
+    encoder: ""
+    # Minimum level that includes stacktraces (--zap-stacktrace-level): one of info, error, or panic.
+    stacktraceLevel: ""
+    # Timestamp format (--zap-time-encoding): one of epoch, millis, nano, iso8601, rfc3339, or rfc3339nano.
+    timeEncoding: ""
   clusterController:
     replicas: 2
   image:

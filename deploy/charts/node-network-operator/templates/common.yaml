@@ -18,6 +18,17 @@
 {{- $clusterControllerPod := index $clusterController "pod" -}}
 {{- $_ := set $clusterControllerPod "hostNetwork" (tpl (index $clusterControllerPod "hostNetwork") . | include "strToBool" | eq "true") -}}
 
+{{- $logging := .Values.config.logging | default dict -}}
+{{- $loggingArgs := list -}}
+{{- if kindIs "bool" $logging.development -}}
+    {{- $loggingArgs = append $loggingArgs (printf "--zap-devel=%t" $logging.development) -}}
+{{- end -}}
+{{- range $option, $flag := dict "level" "zap-log-level" "encoder" "zap-encoder" "stacktraceLevel" "zap-stacktrace-level" "timeEncoding" "zap-time-encoding" -}}
+    {{- with index $logging $option -}}
+        {{- $loggingArgs = append $loggingArgs (printf "--%s=%v" $flag .) -}}
+    {{- end -}}
+{{- end -}}
+
 {{- range $controllerName, $controllerConfig := index .Values "resources" "controllers" -}}
     {{- range $containerName, $containerConfig := index $controllerConfig "containers" -}}
     {{- $args := index $containerConfig "args" -}}
@@ -25,6 +36,7 @@
     {{- range $index, $arg := $args -}}
         {{- $templatedArgs = append $templatedArgs (tpl $arg $) -}}
     {{- end -}}
+    {{- $templatedArgs = concat $templatedArgs $loggingArgs -}}
     {{- $_ := set $containerConfig "args" $templatedArgs -}}
     {{- $containerImage := index $containerConfig "image" -}}
     {{- $_ := set $containerImage "repository" (tpl (index $containerImage "repository") $) -}}
