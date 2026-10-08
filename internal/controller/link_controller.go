@@ -371,7 +371,10 @@ func (r *LinkReconciler) patchResource(ctx context.Context, clusterStateLink, li
 
 		err := r.Status().Patch(ctx, link, client.MergeFrom(clusterStateLink))
 		// Removing the last finalizer of a resource that is being deleted removes the resource, leaving no status to patch.
-		if err != nil && !(apierrors.IsNotFound(err) && !link.DeletionTimestamp.IsZero()) {
+		if apierrors.IsNotFound(err) && !link.DeletionTimestamp.IsZero() {
+			err = nil
+		}
+		if err != nil {
 			return r.patchFailed(ctx, link, err)
 		}
 	}

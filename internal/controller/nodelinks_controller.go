@@ -927,7 +927,10 @@ func (r *NodeLinksReconciler) patchResource(ctx context.Context, clusterStateNod
 
 		err := r.Status().Patch(ctx, nodeLinks, client.MergeFrom(clusterStateNodeLinks))
 		// Removing the last finalizer of a resource that is being deleted removes the resource, leaving no status to patch.
-		if err != nil && !(apierrors.IsNotFound(err) && !nodeLinks.DeletionTimestamp.IsZero()) {
+		if apierrors.IsNotFound(err) && !nodeLinks.DeletionTimestamp.IsZero() {
+			err = nil
+		}
+		if err != nil {
 			return r.patchFailed(ctx, nodeLinks, err)
 		}
 	}
