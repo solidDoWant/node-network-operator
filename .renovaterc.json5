@@ -1,0 +1,131 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  // Same base and policy as infra-mk3: commit format, dashboard, and `# renovate:` annotations from the
+  // home-operations presets.
+  extends: [
+    "github>home-operations/renovate-presets#8.1.0",
+    ":semanticCommits",
+    ":timezone(America/Chicago)",
+  ],
+
+  // Hold new releases briefly (supply-chain safety, chained hotfix releases).
+  // timestamp-optional: registries without release timestamps would otherwise be held forever.
+  minimumReleaseAge: "3 days",
+  // cspell:words Behaviour
+  minimumReleaseAgeBehaviour: "timestamp-optional",
+  suppressNotifications: ["prEditedNotification", "prIgnoreNotification"],
+
+  // Replaces config:recommended's list, which also ignores test directories. The e2e suite's cluster add-ons and
+  // manifests under test/ should be updated too.
+  ignorePaths: ["**/node_modules/**", "**/bower_components/**"],
+
+  // Keep go.mod and go.sum consistent with the updated requirements.
+  postUpdateOptions: ["gomodTidy", "gomodUpdateImportPaths"],
+
+  customManagers: [
+    {
+      customType: "regex",
+      description: "Annotated version pins: Makefile `NAME ?= value` and Go `name = \"value\"` (the preset's annotation pattern does not match these)",
+      managerFilePatterns: ["/(^|/)Makefile$/", "/\\.mk$/", "/\\.go$/"],
+      matchStrings: [
+        "renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*\\w+\\s*\\??=\\s*\"?(?<currentValue>v?\\d[^\"\\s]*)\"?",
+      ],
+    },
+    {
+      customType: "regex",
+      description: "Commit pins on a branch: `# renovate: datasource=git-refs depName=<repo URL> branch=<branch>` followed by `NAME = <sha>`",
+      managerFilePatterns: ["/(^|/)Makefile$/", "/\\.mk$/"],
+      matchStrings: [
+        "renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)\\n\\s*\\w+\\s*\\??=\\s*(?<currentDigest>[0-9a-f]{40})",
+      ],
+    },
+  ],
+
+  packageRules: [
+    // --- Approval / safety ---------------------------------------------------
+    {
+      description: "Major updates wait for a Dependency Dashboard checkbox",
+      matchUpdateTypes: ["major"],
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "This project's own image: tags are set by the release process",
+      matchPackageNames: ["ghcr.io/soliddowant/node-network-operator"],
+      enabled: false,
+    },
+    {
+      description: "devcontainer tags are <image major>-<go major>.<go minor>-<distro>; track the Go version",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["mcr.microsoft.com/devcontainers/go"],
+      versioning: "regex:^(?<build>\\d+)-(?<major>\\d+)\\.(?<minor>\\d+)-(?<compatibility>[a-z]+)$",
+    },
+
+    // --- Groups (one PR for components that must move together) ------------
+    {
+      description: "Kubernetes libraries and controller-runtime: controller-runtime minors target a Kubernetes minor",
+      groupName: "kubernetes",
+      matchDatasources: ["go"],
+      matchPackageNames: ["k8s.io/**", "sigs.k8s.io/controller-runtime"],
+      group: { commitMessageTopic: "{{{groupName}}} group" },
+    },
+    {
+      groupName: "ginkgo",
+      matchDatasources: ["go"],
+      matchPackageNames: ["github.com/onsi/ginkgo/v2", "github.com/onsi/gomega"],
+      group: { commitMessageTopic: "{{{groupName}}} group" },
+    },
+    {
+      groupName: "netlink",
+      matchDatasources: ["go"],
+      matchPackageNames: ["github.com/vishvananda/netlink", "github.com/vishvananda/netns"],
+      group: { commitMessageTopic: "{{{groupName}}} group" },
+    },
+    {
+      description: "e2e test dependencies (cluster add-ons installed by the e2e suite)",
+      groupName: "e2e dependencies",
+      matchFileNames: ["test/**"],
+      group: { commitMessageTopic: "{{{groupName}}}" },
+    },
+
+    // --- Labels ---------------------------------------------------------------
+    {
+      matchUpdateTypes: ["major"],
+      addLabels: ["type/major"],
+    },
+    {
+      matchUpdateTypes: ["minor"],
+      addLabels: ["type/minor"],
+    },
+    {
+      matchUpdateTypes: ["patch"],
+      addLabels: ["type/patch"],
+    },
+    {
+      matchUpdateTypes: ["digest"],
+      addLabels: ["type/digest"],
+    },
+    {
+      matchDatasources: ["docker"],
+      addLabels: ["renovate/container"],
+    },
+    {
+      matchDatasources: ["helm"],
+      addLabels: ["renovate/helm"],
+    },
+    {
+      matchDatasources: ["github-releases", "github-tags", "git-refs"],
+      addLabels: ["renovate/github-release"],
+    },
+    {
+      matchDatasources: ["go", "golang-version"],
+      addLabels: ["renovate/go"],
+    },
+
+    // Last so it overrides any preset rule: no CI, so every update is merged by hand.
+    {
+      description: "Automerge disabled for everything",
+      matchPackageNames: ["*"],
+      automerge: false,
+    },
+  ],
+}

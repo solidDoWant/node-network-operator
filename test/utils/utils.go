@@ -13,17 +13,21 @@ import (
 )
 
 const (
+	// renovate: datasource=github-releases depName=prometheus-operator/prometheus-operator
 	prometheusOperatorVersion = "v0.94.1"
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
 
+	// renovate: datasource=github-releases depName=cert-manager/cert-manager
 	certmanagerVersion = "v1.21.2"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
+	// renovate: datasource=github-releases depName=k8snetworkplumbingwg/multus-cni
 	multusVersion = "v4.3.1"
 	multusURLTmpl = "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/refs/tags/%s/" +
 		"deployments/multus-daemonset-thick.yml"
 
+	// renovate: datasource=github-releases depName=k8snetworkplumbingwg/whereabouts
 	whereaboutsVersion = "v0.9.4"
 	whereaboutsURL     = "https://raw.githubusercontent.com/k8snetworkplumbingwg/whereabouts/refs/tags/%s/doc/crds/%s"
 )
