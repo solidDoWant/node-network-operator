@@ -23,9 +23,24 @@ type Manager interface {
 	IsManaged() bool
 }
 
+// resolveLinkRef returns the reference that should be applied on the node. An optional reference to a link that is not
+// on the node resolves to nil, so the dependent link is configured without it.
+func resolveLinkRef(linkRef *nodenetworkoperatorv1alpha1.LinkReference, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) *nodenetworkoperatorv1alpha1.LinkReference {
+	if linkRef == nil || !linkRef.Optional {
+		return linkRef
+	}
+
+	if _, ok := linkResources[linkRef.Name]; !ok {
+		return nil
+	}
+
+	return linkRef
+}
+
 // doesLinkRefNeedUpdate checks if the current link reference needs to be updated to match the desired configuration.
 // Returns true if an update is needed, false otherwise.
 func doesLinkRefNeedUpdate(linkRef *nodenetworkoperatorv1alpha1.LinkReference, currentIndex int, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) (bool, error) {
+	linkRef = resolveLinkRef(linkRef, linkResources)
 	if linkRef != nil {
 		if currentIndex == 0 {
 			// Link does not reference another link, but one is specified
@@ -116,6 +131,7 @@ func basicUpsertWithCheck(desiredLink netlink.Link, shouldForceReplace func(exis
 // getDesiredReferencedLinkIndex returns the index of the link referenced by linkRef in the desired configuration.
 // If linkRef is nil, returns 0. Most (all?) netlink functions interpret a link index of 0 as "no link" or "unset reference".
 func getDesiredReferencedLinkIndex(linkRef *nodenetworkoperatorv1alpha1.LinkReference, linkResources map[string]*nodenetworkoperatorv1alpha1.Link) (int, error) {
+	linkRef = resolveLinkRef(linkRef, linkResources)
 	if linkRef == nil {
 		return 0, nil
 	}
