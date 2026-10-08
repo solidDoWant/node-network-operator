@@ -22,10 +22,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/dominikbraun/graph"
 	"github.com/elliotchance/pie/v2"
@@ -48,6 +50,12 @@ type NodeLinksReconciler struct {
 	// changes made outside the operator (for example, a VXLAN removed by the kernel along with its device).
 	// Zero disables periodic re-checks.
 	ResyncInterval time.Duration
+
+	// watchedLinkNames are the netlink link names of all Links on the node, including unmanaged ones. Events for
+	// these links trigger a reconcile.
+	watchedLinkNames *linkNameSet
+	// linkEvents receives reconcile requests from the link event watcher.
+	linkEvents chan event.GenericEvent
 }
 
 func NewNodeLinksReconciler(k8sCluster cluster.Cluster, nodeName string) *NodeLinksReconciler {
@@ -56,6 +64,9 @@ func NewNodeLinksReconciler(k8sCluster cluster.Cluster, nodeName string) *NodeLi
 		Scheme:   k8sCluster.GetScheme(),
 		nodeName: nodeName,
 		recorder: k8sCluster.GetEventRecorderFor("nodelinks-controller"),
+
+		watchedLinkNames: &linkNameSet{},
+		linkEvents:       make(chan event.GenericEvent, 1),
 	}
 }
 
@@ -144,6 +155,10 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 		return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, condition, err, "failed to retrieve Link resources")
 	}
 
+	r.watchedLinkNames.set(pie.Map(pie.Values(linkResources), func(link *nodenetworkoperatorv1alpha1.Link) string {
+		return link.Spec.LinkName
+	}))
+
 	if err := r.validateLinks(nodeLinks, linkResources); err != nil {
 		return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, nil, err, "link validation failed")
 	}
@@ -220,6 +235,7 @@ func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNo
 	if err := r.deleteLinks(ctx, nodeLinks, nodeLinks.Status.LastAttemptedNetlinkLinks); err != nil {
 		return r.handleError(ctx, clusterStateNodeLinks, nodeLinks, nil, err, "failed to delete all links during NodeLinks deletion")
 	}
+	r.watchedLinkNames.set(nil)
 
 	// Remove finalizer
 	controllerutil.RemoveFinalizer(nodeLinks, nodeLinksFinalizerName)
@@ -986,6 +1002,18 @@ func (r *NodeLinksReconciler) patchFailed(ctx context.Context, nodeLinks *nodene
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	watcher := &linkEventWatcher{
+		nodeName:   r.nodeName,
+		linkNames:  r.watchedLinkNames,
+		events:     r.linkEvents,
+		subscribe:  netlink.LinkSubscribeWithOptions,
+		minBackoff: linkEventMinBackoff,
+		maxBackoff: linkEventMaxBackoff,
+	}
+	if err := mgr.Add(watcher); err != nil {
+		return fmt.Errorf("failed to add netlink link event watcher: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(
 			&nodenetworkoperatorv1alpha1.NodeLinks{},
@@ -1020,6 +1048,8 @@ func (r *NodeLinksReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
+		// Re-check the node when one of its links changes outside the operator
+		WatchesRawSource(source.Channel(r.linkEvents, &handler.EnqueueRequestForObject{})).
 		Named("nodelinks").
 		WithOptions(controller.TypedOptions[reconcile.Request]{
 			// Ignore leader election. This controller should run once per node.

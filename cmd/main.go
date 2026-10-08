@@ -77,9 +77,9 @@ func main() {
 			"provided that the pod is the leader (if leadership is enabled).")
 	flag.BoolVar(&enableNodeSpecificControllers, "enable-node-specific-controllers", true,
 		"If set, controllers that watch node-specific resources (such as NodeLinks) will be enabled.")
-	flag.DurationVar(&resyncInterval, "resync-interval", 5*time.Minute,
-		"How often each node re-checks its links against the desired state, repairing changes made outside the operator. "+
-			"Set to 0 to only reconcile when resources change.")
+	flag.DurationVar(&resyncInterval, "resync-interval", 30*time.Minute,
+		"How often each node re-checks its links against the desired state. Netlink link events trigger a re-check "+
+			"immediately, so this is a backstop for missed events. Set to 0 to disable periodic re-checks.")
 	opts := zap.Options{
 		Development: true,
 	}
