@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -52,6 +53,7 @@ func main() {
 	var nodeName string
 	var enableClusterWideControllers bool
 	var enableNodeSpecificControllers bool
+	var resyncInterval time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -75,6 +77,9 @@ func main() {
 			"provided that the pod is the leader (if leadership is enabled).")
 	flag.BoolVar(&enableNodeSpecificControllers, "enable-node-specific-controllers", true,
 		"If set, controllers that watch node-specific resources (such as NodeLinks) will be enabled.")
+	flag.DurationVar(&resyncInterval, "resync-interval", 5*time.Minute,
+		"How often each node re-checks its links against the desired state, repairing changes made outside the operator. "+
+			"Set to 0 to only reconcile when resources change.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -203,7 +208,9 @@ func main() {
 
 	if enableNodeSpecificControllers {
 
-		if err := controller.NewNodeLinksReconciler(mgr, nodeName).SetupWithManager(mgr); err != nil {
+		nodeLinksReconciler := controller.NewNodeLinksReconciler(mgr, nodeName)
+		nodeLinksReconciler.ResyncInterval = resyncInterval
+		if err := nodeLinksReconciler.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "NodeLinks")
 			os.Exit(1)
 		}

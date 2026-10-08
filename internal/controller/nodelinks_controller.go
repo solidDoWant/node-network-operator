@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,6 +43,11 @@ type NodeLinksReconciler struct {
 	Scheme   *runtime.Scheme
 	nodeName string
 	recorder record.EventRecorder
+
+	// ResyncInterval is how often the node's links are re-checked after a successful reconcile, which repairs
+	// changes made outside the operator (for example, a VXLAN removed by the kernel along with its device).
+	// Zero disables periodic re-checks.
+	ResyncInterval time.Duration
 }
 
 func NewNodeLinksReconciler(k8sCluster cluster.Cluster, nodeName string) *NodeLinksReconciler {
@@ -194,7 +201,11 @@ func (r *NodeLinksReconciler) handleUpsert(ctx context.Context, clusterStateNode
 		Reason: "ReconcileSuccessful",
 	}
 	meta.SetStatusCondition(&nodeLinks.Status.Conditions, condition)
-	return ctrl.Result{}, r.patchResource(ctx, clusterStateNodeLinks, nodeLinks)
+	if err := r.patchResource(ctx, clusterStateNodeLinks, nodeLinks); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{RequeueAfter: r.ResyncInterval}, nil
 }
 
 func (r *NodeLinksReconciler) handleDeletion(ctx context.Context, clusterStateNodeLinks, nodeLinks *nodenetworkoperatorv1alpha1.NodeLinks) (ctrl.Result, error) {
@@ -616,13 +627,7 @@ func (r *NodeLinksReconciler) upsertLink(ctx context.Context, nodeLinks *nodenet
 	}
 	r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, readyCondition)
 
-	operationalStateCondition := metav1.Condition{
-		Type:    nodenetworkoperatorv1alpha1.NetlinkLinkConditionOperationallyUp,
-		Status:  metav1.ConditionTrue,
-		Reason:  "LinkUp",
-		Message: "Link is operationally up",
-	}
-	r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, operationalStateCondition)
+	r.setLinkCondition(nodeLinks, linkResource.Spec.LinkName, getOperationalCondition(linkResource.Spec.LinkName))
 
 	return nil
 }
@@ -797,6 +802,36 @@ func (r *NodeLinksReconciler) getUndesiredLinks(nodeLinks *nodenetworkoperatorv1
 
 	_, linkNamesToRemove := pie.Diff(nodeLinks.Status.LastAttemptedNetlinkLinks, desiredNetlinkLinkNames)
 	return linkNamesToRemove
+}
+
+// getOperationalCondition reports whether the netlink link is operationally up. Links that do not track carrier
+// (such as VXLANs) always report an unknown operational state, so they are considered up when administratively up.
+func getOperationalCondition(linkName string) metav1.Condition {
+	condition := metav1.Condition{
+		Type: nodenetworkoperatorv1alpha1.NetlinkLinkConditionOperationallyUp,
+	}
+
+	link, err := netlink.LinkByName(linkName)
+	if err != nil {
+		condition.Status = metav1.ConditionUnknown
+		condition.Reason = "LinkStateUnavailable"
+		condition.Message = fmt.Sprintf("Failed to get link state: %v", err)
+		return condition
+	}
+
+	attrs := link.Attrs()
+	operState := attrs.OperState
+	if operState == netlink.OperUp || (operState == netlink.OperUnknown && attrs.Flags&net.FlagUp != 0) {
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = "LinkUp"
+		condition.Message = "Link is operationally up"
+		return condition
+	}
+
+	condition.Status = metav1.ConditionFalse
+	condition.Reason = "LinkDown"
+	condition.Message = fmt.Sprintf("Link operational state is %q", operState.String())
+	return condition
 }
 
 // bringDownLink brings down the provided netlink link. This is used when removing links from the node.
