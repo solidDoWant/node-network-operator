@@ -300,4 +300,33 @@ var _ = Describe("Link Controller", func() {
 			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "NodeLinks should not exist for node %s after deletion, got: %v", nodeToDelete.Name, err)
 		})
 	})
+
+	Context("When validating VXLAN resources", func() {
+		ctx := context.Background()
+
+		DescribeTable("should reject a VXLAN link missing a required field",
+			func(vxlan nodenetworkoperatorv1alpha1.VXLANSpecs, missingField string) {
+				link := &nodenetworkoperatorv1alpha1.Link{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-invalid-vxlan",
+					},
+					Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+						LinkName: "test-vxlan",
+						LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{
+							VXLAN: &vxlan,
+						},
+					},
+				}
+
+				err := k8sClient.Create(ctx, link)
+				if err == nil {
+					_ = k8sClient.Delete(ctx, link)
+				}
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "Expected the link to be rejected as invalid, got: %v", err)
+				Expect(err.Error()).To(ContainSubstring(missingField))
+			},
+			Entry("missing vnid", nodenetworkoperatorv1alpha1.VXLANSpecs{RemoteIPAddress: "10.255.0.1"}, "vnid"),
+			Entry("missing remoteIPAddress", nodenetworkoperatorv1alpha1.VXLANSpecs{VNID: 4244}, "remoteIPAddress"),
+		)
+	})
 })

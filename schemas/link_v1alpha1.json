@@ -205,6 +205,10 @@
               "type": "integer"
             }
           },
+          "required": [
+            "remoteIPAddress",
+            "vnid"
+          ],
           "type": "object",
           "additionalProperties": false
         }
