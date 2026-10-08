@@ -223,8 +223,10 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 				controllerutil.RemoveFinalizer(&nodeLinks, nodeLinksFinalizerName)
 			}
 		}
+		finalizerRemoved := len(nodeLinks.Finalizers) != len(clusterStatenodeLinks.Finalizers)
 
-		if !slices.Contains(nodeLinks.Spec.MatchingLinks, link.Name) {
+		containsLink := slices.Contains(nodeLinks.Spec.MatchingLinks, link.Name)
+		if !containsLink && !finalizerRemoved {
 			// Skip the resource if it does not contain the link
 			return nil
 		}
@@ -233,9 +235,10 @@ func (r *LinkReconciler) removeFromUnmatchedNodeLinks(ctx context.Context, link 
 			return linkName != link.Name
 		})
 
-		// Patch or delete the NodeLinks resource, depending on whether it still has any matching links
+		// Patch or delete the NodeLinks resource, depending on whether it still has any matching links. A resource that is
+		// already being deleted is always patched, because a delete request does not persist the finalizer removal.
 		var err error
-		if len(nodeLinks.Spec.MatchingLinks) == 0 {
+		if len(nodeLinks.Spec.MatchingLinks) == 0 && nodeLinks.DeletionTimestamp.IsZero() {
 			logf.FromContext(ctx).Info("deleting NodeLinks resource", "node", nodeLinksName)
 			err = r.Delete(ctx, &nodeLinks)
 		} else {
