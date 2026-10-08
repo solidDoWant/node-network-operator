@@ -113,6 +113,11 @@
               "type": "object",
               "additionalProperties": false
             },
+            "learning": {
+              "default": true,
+              "description": "Learning enables learning of remote VTEP addresses from received packets. When disabled, all\ntraffic is sent to RemoteIPAddress, which floods every VTEP if it is a multicast group.",
+              "type": "boolean"
+            },
             "master": {
               "description": "Master is the link that this VXLAN interface will be enslaved to.\nThis is typically a bridge interface.",
               "properties": {

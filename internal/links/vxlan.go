@@ -83,6 +83,10 @@ func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetwor
 		return true, nil
 	}
 
+	if vxlanLink.Learning != m.link.Spec.VXLAN.IsLearningEnabled() {
+		return true, nil
+	}
+
 	needsUpdate, err = doesLinkRefNeedUpdate(m.link.Spec.VXLAN.Device, vxlanLink.VtepDevIndex, links)
 	if err != nil {
 		return false, fmt.Errorf("failed to check if device link needs update: %w", err)
@@ -107,6 +111,7 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 		Port:      int(m.link.Spec.VXLAN.RemotePort),
 		PortLow:   int(m.link.Spec.VXLAN.SourcePort.Start),
 		PortHigh:  int(m.link.Spec.VXLAN.SourcePort.End),
+		Learning:  m.link.Spec.VXLAN.IsLearningEnabled(),
 	}
 	vxlan.Name = m.link.Spec.LinkName
 
@@ -147,6 +152,12 @@ func (m *VXLANManager) Upsert(ctx context.Context, nodeLinks *nodenetworkoperato
 	if !vxlan.Group.Equal(desiredRemoteAddress) {
 		if err := linkSetVXLANGroup(vxlan, desiredRemoteAddress); err != nil {
 			return fmt.Errorf("failed to set VXLAN group for %q: %w", m.link.Spec.LinkName, err)
+		}
+	}
+
+	if desiredLearning := m.link.Spec.VXLAN.IsLearningEnabled(); vxlan.Learning != desiredLearning {
+		if err := linkSetVXLANLearning(vxlan, desiredLearning); err != nil {
+			return fmt.Errorf("failed to set VXLAN learning for %q: %w", m.link.Spec.LinkName, err)
 		}
 	}
 
@@ -262,6 +273,30 @@ func linkSetVXLANVtepDevIndex(link netlink.Link, ifIndex int) error {
 
 	data := linkInfo.AddRtAttr(nl.IFLA_INFO_DATA, nil)
 	data.AddRtAttr(nl.IFLA_VXLAN_LINK, nl.Uint32Attr(uint32(ifIndex)))
+
+	req.AddData(linkInfo)
+
+	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
+	return err
+}
+
+func linkSetVXLANLearning(link netlink.Link, learning bool) error {
+	req := nl.NewNetlinkRequest(unix.RTM_NEWLINK, unix.NLM_F_ACK)
+
+	msg := nl.NewIfInfomsg(unix.AF_UNSPEC)
+	msg.Index = int32(link.Attrs().Index)
+	req.AddData(msg)
+
+	linkInfo := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
+	linkInfo.AddRtAttr(nl.IFLA_INFO_KIND, nl.NonZeroTerminated(link.Type()))
+
+	var value uint8
+	if learning {
+		value = 1
+	}
+
+	data := linkInfo.AddRtAttr(nl.IFLA_INFO_DATA, nil)
+	data.AddRtAttr(nl.IFLA_VXLAN_LEARNING, nl.Uint8Attr(value))
 
 	req.AddData(linkInfo)
 
