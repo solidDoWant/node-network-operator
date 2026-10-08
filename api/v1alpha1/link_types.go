@@ -123,6 +123,17 @@ type VXLANSpecs struct {
 	// +kubebuilder:validation:Minimum=68
 	// +kubebuilder:validation:Maximum=65535
 	MTU *int32 `json:"mtu,omitempty"`
+
+	// Learning enables learning of remote VTEP addresses from received packets. When disabled, all
+	// traffic is sent to RemoteIPAddress, which floods every VTEP if it is a multicast group.
+	// +kubebuilder:default=true
+	// +kubebuilder:validation:Optional
+	Learning *bool `json:"learning,omitempty"`
+}
+
+// IsLearningEnabled returns whether VTEP address learning is enabled. Defaults to true when unset.
+func (s *VXLANSpecs) IsLearningEnabled() bool {
+	return s.Learning == nil || *s.Learning
 }
 
 // BridgeSpec defines the desired state of the link as a bridge.
