@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -384,6 +385,128 @@ var _ = Describe("NodeLinks Controller", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(nodeLinks), &stored)).To(Succeed())
 			Expect(stored.Finalizers).To(ContainElement(nodeLinksFinalizerName))
 			Expect(stored.Status.LastAttemptedNetlinkLinks).To(ConsistOf("test-link"))
+		})
+	})
+
+	Context("When re-checking links on the node", func() {
+		const nodeName = "test-resync-node"
+		const bridgeLinkName = "test-resync-bridge"
+		const bridgeInterfaceName = "nl-test-br2"
+		const unmanagedLinkName = "test-resync-unmanaged"
+		const dummyInterfaceName = "nl-test-dummy0"
+
+		ctx := context.Background()
+		request := reconcile.Request{NamespacedName: types.NamespacedName{Name: nodeName}}
+
+		createResources := func(links ...*nodenetworkoperatorv1alpha1.Link) {
+			Expect(k8sClient.Create(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}})).To(Succeed())
+			linkNames := make([]string, 0, len(links))
+			for _, link := range links {
+				Expect(k8sClient.Create(ctx, link)).To(Succeed())
+				linkNames = append(linkNames, link.Name)
+			}
+			Expect(k8sClient.Create(ctx, &nodenetworkoperatorv1alpha1.NodeLinks{
+				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+				Spec:       nodenetworkoperatorv1alpha1.NodeLinksSpec{MatchingLinks: linkNames},
+			})).To(Succeed())
+		}
+
+		bridgeLink := func() *nodenetworkoperatorv1alpha1.Link {
+			return &nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: bridgeLinkName},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName:  bridgeInterfaceName,
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{Bridge: &nodenetworkoperatorv1alpha1.BridgeSpec{}},
+				},
+			}
+		}
+
+		// Reconciles twice so that the result does not depend on the outcome of the first reconcile of a new NodeLinks.
+		reconcileNodeLinks := func(resyncInterval time.Duration) (reconcile.Result, error) {
+			reconciler := NewNodeLinksReconciler(k8sCluster, nodeName)
+			reconciler.ResyncInterval = resyncInterval
+			_, _ = reconciler.Reconcile(ctx, request)
+			return reconciler.Reconcile(ctx, request)
+		}
+
+		getLinkConditions := func(interfaceName string) []metav1.Condition {
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			Expect(k8sClient.Get(ctx, request.NamespacedName, &nodeLinks)).To(Succeed())
+			return nodeLinks.Status.NetlinkLinkConditions[interfaceName]
+		}
+
+		AfterEach(func() {
+			for _, interfaceName := range []string{bridgeInterfaceName, dummyInterfaceName} {
+				if link, err := netlink.LinkByName(interfaceName); err == nil {
+					_ = netlink.LinkDel(link)
+				}
+			}
+
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			if err := k8sClient.Get(ctx, request.NamespacedName, &nodeLinks); err == nil {
+				nodeLinks.Finalizers = nil
+				Expect(client.IgnoreNotFound(k8sClient.Update(ctx, &nodeLinks))).To(Succeed())
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &nodeLinks))).To(Succeed())
+			}
+			for _, name := range []string{bridgeLinkName, unmanagedLinkName} {
+				link := &nodenetworkoperatorv1alpha1.Link{ObjectMeta: metav1.ObjectMeta{Name: name}}
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, link))).To(Succeed())
+			}
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}))).To(Succeed())
+		})
+
+		It("should requeue after the resync interval and repair links changed outside the operator", func() {
+			createResources(bridgeLink())
+
+			result, err := reconcileNodeLinks(3 * time.Minute)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(3*time.Minute), "A successful reconcile should be re-checked after the resync interval")
+
+			By("deleting the bridge outside the operator")
+			bridge, err := netlink.LinkByName(bridgeInterfaceName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(netlink.LinkDel(bridge)).To(Succeed())
+
+			By("re-checking the node")
+			_, err = reconcileNodeLinks(3 * time.Minute)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = netlink.LinkByName(bridgeInterfaceName)
+			Expect(err).NotTo(HaveOccurred(), "The bridge should be recreated")
+		})
+
+		It("should not requeue when the resync interval is zero", func() {
+			createResources(bridgeLink())
+
+			result, err := reconcileNodeLinks(0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeZero())
+		})
+
+		It("should report the actual operational state of links", func() {
+			Expect(netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: dummyInterfaceName}})).To(Succeed())
+			createResources(&nodenetworkoperatorv1alpha1.Link{
+				ObjectMeta: metav1.ObjectMeta{Name: unmanagedLinkName},
+				Spec: nodenetworkoperatorv1alpha1.LinkSpec{
+					LinkName:  dummyInterfaceName,
+					LinkSpecs: nodenetworkoperatorv1alpha1.LinkSpecs{Unmanaged: &nodenetworkoperatorv1alpha1.UnmanagedSpec{}},
+				},
+			})
+
+			By("checking a link that is down")
+			_, err := reconcileNodeLinks(0)
+			Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(getLinkConditions(dummyInterfaceName), nodenetworkoperatorv1alpha1.NetlinkLinkConditionOperationallyUp)
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("LinkDown"))
+
+			By("checking the link after it is brought up")
+			dummy, err := netlink.LinkByName(dummyInterfaceName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(netlink.LinkSetUp(dummy)).To(Succeed())
+			_, err = reconcileNodeLinks(0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(meta.IsStatusConditionTrue(getLinkConditions(dummyInterfaceName), nodenetworkoperatorv1alpha1.NetlinkLinkConditionOperationallyUp)).To(BeTrue())
 		})
 	})
 })

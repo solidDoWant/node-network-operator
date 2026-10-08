@@ -3,6 +3,7 @@ package links
 import (
 	"context"
 	"fmt"
+	"net"
 
 	nodenetworkoperatorv1alpha1 "github.com/solidDoWant/node-network-operator/api/v1alpha1"
 	"github.com/vishvananda/netlink"
@@ -47,6 +48,10 @@ func (m *BridgeManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetwo
 	}
 
 	if m.link.Spec.Bridge.MTU != nil && linkAttrs.MTU != int(*m.link.Spec.Bridge.MTU) {
+		return true, nil
+	}
+
+	if linkAttrs.Flags&net.FlagUp == 0 {
 		return true, nil
 	}
 
