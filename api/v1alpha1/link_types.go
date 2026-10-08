@@ -82,14 +82,14 @@ type VXLANSpecs struct {
 	// by the operator, and is the responsibility of the user to ensure this is unique across
 	// all VXLAN links on the node. Deploying multiple VXLAN links with the same VNID will result
 	// in the operator repeatedly trying to create the link, and failing.
-	// +kubebuilder:validation:Requried
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=16777215
 	VNID int32 `json:"vnid,omitempty"`
 
 	// RemoteIPAddress defines the remote VTEP(s) for VXLAN traffic. This can refer to a single
 	// host, or a multicast group.
-	// +kubebuilder:validation:Requried
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Format=ipv4
 	RemoteIPAddress string `json:"remoteIPAddress,omitempty"`
 
