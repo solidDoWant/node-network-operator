@@ -83,6 +83,10 @@ func (m *VXLANManager) IsUpsertNeeded(ctx context.Context, nodeLinks *nodenetwor
 		return true, nil
 	}
 
+	if vxlanLink.PortLow != int(m.link.Spec.VXLAN.SourcePort.Start) || vxlanLink.PortHigh != int(m.link.Spec.VXLAN.SourcePort.End) {
+		return true, nil
+	}
+
 	if vxlanLink.Learning != m.link.Spec.VXLAN.IsLearningEnabled() {
 		return true, nil
 	}
