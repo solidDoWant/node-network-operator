@@ -205,13 +205,17 @@ var _ = Describe("Link Controller", func() {
 				By(fmt.Sprintf("Cleanup the NodeLinks for node %s", node.Name))
 				// While these are owned by the node, they are not deleted automatically because envtest does not deploy the kube-controller-manager.
 				// See https://github.com/kubernetes-sigs/controller-runtime/issues/3083 for details.
+				// The NodeLinks may not exist if the spec failed before reconciling a link that matches this node.
 				var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeLinks)).To(Succeed(), "Failed to get node links for node %s", node.Name)
-				// This test does not need to verify the finalizer logic of the NodeLinks resource.
-				nodeLinks.Finalizers = nil
-				Expect(k8sClient.Update(ctx, &nodeLinks)).To(Succeed(), "Failed to remove finalizers from node links for node %s", node.Name)
-				Expect(k8sClient.Delete(ctx, &nodeLinks)).To(Succeed(), "Failed to delete node links for node %s", node.Name)
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeLinks)).ToNot(Succeed(), "NodeLinks should be deleted after reconciliation")
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeLinks)
+				if !apierrors.IsNotFound(err) {
+					Expect(err).ToNot(HaveOccurred(), "Failed to get node links for node %s", node.Name)
+					// This test does not need to verify the finalizer logic of the NodeLinks resource.
+					nodeLinks.Finalizers = nil
+					Expect(k8sClient.Update(ctx, &nodeLinks)).To(Succeed(), "Failed to remove finalizers from node links for node %s", node.Name)
+					Expect(k8sClient.Delete(ctx, &nodeLinks)).To(Succeed(), "Failed to delete node links for node %s", node.Name)
+					Expect(k8sClient.Get(ctx, types.NamespacedName{Name: node.Name}, &nodeLinks)).ToNot(Succeed(), "NodeLinks should be deleted after reconciliation")
+				}
 
 				By(fmt.Sprintf("Reconcile the Link resources after node %s deletion", node.Name))
 				for _, link := range links {
@@ -234,9 +238,13 @@ var _ = Describe("Link Controller", func() {
 		It("should successfully reconcile the resources with nodes", func() {
 			By("Reconciling the created resources")
 
+			// Reconcile every link before verifying anything. Each node's NodeLinks reflects all links, so checking it
+			// between reconciles would depend on (randomized) map iteration order.
 			for name, link := range links {
 				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, link.request)).To(Equal(reconcile.Result{}), "Failed to reconcile resource %s", name)
+			}
 
+			for name, link := range links {
 				By(fmt.Sprintf("Verifying the resource %s is in the expected state", name))
 				var resource nodenetworkoperatorv1alpha1.Link
 				Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s", name)
@@ -270,29 +278,26 @@ var _ = Describe("Link Controller", func() {
 			var deletedNode corev1.Node
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &deletedNode)).ToNot(Succeed(), "Node should be deleted after reconciliation")
 
+			// Reconcile every link before verifying anything. The deleted node's NodeLinks is only removed once no
+			// links reference it, so checking it between reconciles would depend on (randomized) map iteration order.
 			for name, link := range links {
 				Expect(NewLinkReconciler(k8sCluster).Reconcile(ctx, link.request)).To(Equal(reconcile.Result{}), "Failed to reconcile resource %s after node deletion", name)
+			}
 
+			for name, link := range links {
 				By(fmt.Sprintf("Verifying the resource %s updates after node deletion", name))
 				var resource nodenetworkoperatorv1alpha1.Link
-				Eventually(func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s after node deletion", name)
-					g.Expect(resource.Status.MatchedNodes).ToNot(ContainElement(nodeToDelete.Name), "The MatchedNodes should not contain the deleted node %s for resource %s", nodeToDelete.Name, name)
-				}).Should(Succeed())
-
-				By(fmt.Sprintf("Verifying the NodeLinks for resource %s after node deletion", name))
-				var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
-
-				if len(resource.Status.MatchedNodes) == 0 {
-					// If the resource has no matched nodes, it should not have a NodeLinks resource
-					// Normally the resource would exist pending deletion, but it is not reconciled at any point so the finalizer is never added.
-					Eventually(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeLinks)).ShouldNot(Succeed(), "NodeLinks should not exist for node %s after deletion", nodeToDelete.Name)
-					continue
-				}
-
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeLinks)).To(Succeed(), "Failed to get node links for node %s after deletion", nodeToDelete.Name)
-				Expect(nodeLinks.Spec.MatchingLinks).ToNot(ContainElement(resource.Name), "The MatchingLinks should not contain the resource %s for deleted node %s", resource.Name, nodeToDelete.Name)
+				Expect(k8sClient.Get(ctx, link.typeNamespacedName, &resource)).To(Succeed(), "Failed to get resource %s after node deletion", name)
+				expectedMatchedNodes := slices.Filter(nil, link.expectedMatchedNodes, func(nodeName string) bool { return nodeName != nodeToDelete.Name })
+				Expect(resource.Status.MatchedNodes).To(ConsistOf(expectedMatchedNodes), "The MatchedNodes should not contain the deleted node %s for resource %s", nodeToDelete.Name, name)
 			}
+
+			By(fmt.Sprintf("Verifying the NodeLinks for deleted node %s", nodeToDelete.Name))
+			// No links reference the deleted node, so its NodeLinks should be deleted. It is never reconciled, so it has no
+			// finalizer and is removed immediately.
+			var nodeLinks nodenetworkoperatorv1alpha1.NodeLinks
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: nodeToDelete.Name}, &nodeLinks)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "NodeLinks should not exist for node %s after deletion, got: %v", nodeToDelete.Name, err)
 		})
 	})
 })
