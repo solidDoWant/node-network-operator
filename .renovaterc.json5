@@ -3,7 +3,7 @@
   // Same base and policy as infra-mk3: commit format, dashboard, and `# renovate:` annotations from the
   // home-operations presets.
   extends: [
-    "github>home-operations/renovate-presets#8.1.0",
+    "github>home-operations/renovate-presets#9.0.0",
     ":semanticCommits",
     ":timezone(America/Chicago)",
   ],
