@@ -3,7 +3,7 @@ THIS_MAKEFILE_DIRECTORY = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 SCHEMAGEN_DIR = $(abspath $(THIS_MAKEFILE_DIRECTORY)/schema-gen)
 OPENAPI2JSONSCHEMA = $(SCHEMAGEN_DIR)/openapi2jsonschema.py
 # renovate: datasource=git-refs depName=https://github.com/datreeio/CRDs-catalog branch=main
-OPENAPI2JSONSCHEMA_VERSION = 63669a570e231d4f1f8396d229a1de512bcf0a34
+OPENAPI2JSONSCHEMA_VERSION = 89c736bdde38b5fecd0f8436ec5f3aa3679a3b86
 
 CRD_DIR = $(abspath $(THIS_MAKEFILE_DIRECTORY)../config/crd/bases/)
 CRD_FILES = $(shell find "$(CRD_DIR)" -name '*.yaml' -type f)
